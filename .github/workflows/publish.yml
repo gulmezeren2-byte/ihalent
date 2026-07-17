@@ -1,12 +1,11 @@
 name: Publish to PyPI
 
-# Fires when you cut a GitHub Release. Uses PyPI Trusted Publishing (OIDC), so
-# there is no token to store: configure ihalent as a trusted publisher on PyPI
-# once (Project → Publishing → GitHub, workflow "publish.yml"), then every
-# release ships itself.
+# Manual trigger only, for now. The PyPI release is published with a token;
+# once ihalent is configured as a PyPI Trusted Publisher (Project → Publishing →
+# GitHub, workflow "publish.yml"), switch this back to `on: release` and every
+# release will ship itself with no token.
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
 
 jobs:
   publish:

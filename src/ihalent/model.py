@@ -59,6 +59,14 @@ class Award:
 
     result_date: str | None = None  # contract date, ISO where known
     cancelled: bool = False
+    lot_count: int = 1  # >1 when a tender was awarded in parts (kısmi teklif)
+
+    @property
+    def is_partial(self) -> bool:
+        """True for a multi-lot tender (kısmi teklif) whose parts were merged
+        into this record. Discounts on merged records are only as trustworthy
+        as the estimate-vs-summed-contract comparison — see ingest._merge_lots."""
+        return self.lot_count > 1
 
     @property
     def discount_pct(self) -> float | None:
@@ -84,6 +92,7 @@ class Award:
         d["tender_type"] = self.tender_type.value
         d["discount_pct"] = self.discount_pct
         d["single_bid"] = self.single_bid
+        d["is_partial"] = self.is_partial
         return d
 
     @classmethod
@@ -108,4 +117,5 @@ class Award:
             valid_bid_count=d.get("valid_bid_count"),
             result_date=d.get("result_date"),
             cancelled=bool(d.get("cancelled", False)),
+            lot_count=int(d.get("lot_count", 1) or 1),
         )

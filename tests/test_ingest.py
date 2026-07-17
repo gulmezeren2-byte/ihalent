@@ -83,3 +83,61 @@ def test_ingest_bundle_list_of_pairs() -> None:
 def test_ingest_bundle_tolerates_junk() -> None:
     bundle = ["not a dict", {"no": "announcements"}, {"announcements": "not a list"}]
     assert ingest_bundle(bundle) == []
+
+
+def _lot(
+    contract: str, winner: str, ikn: str = "2025/2430224", est: str = "200.000.000,00"
+) -> dict:
+    return {
+        "type": {"code": "4", "description": "Sonuç İlanı"},
+        "markdown_content": (
+            f"**SONUÇ İLANI** {ikn}\n"
+            f"| Yaklaşık Maliyeti | : | {est} TRY |\n"
+            f"| Bedeli | : | {contract} TRY |\n"
+            f"| Yüklenicisi | : | {winner} |\n"
+        ),
+    }
+
+
+def test_multi_lot_merges_and_fixes_the_fabricated_discount() -> None:
+    # A 3-part tender: the tender-wide estimate is repeated on each notice, the
+    # contracts are per lot. Taking only the first lot (the old bug) would give
+    # (200M - 70M) / 200M = 65% — a fabricated discount. Merged, it is honest.
+    bundle = {
+        "announcements": [
+            _lot("70.000.000,00", "A İNŞAAT LTD"),
+            _lot("60.000.000,00", "B İNŞAAT LTD"),
+            _lot("50.000.000,00", "C İNŞAAT LTD"),
+        ]
+    }
+    awards = ingest_bundle(bundle)
+    assert len(awards) == 1
+    a = awards[0]
+    assert a.lot_count == 3
+    assert a.is_partial is True
+    assert a.contract_try == 180_000_000.0  # summed across lots
+    assert a.estimate_try == 200_000_000.0  # tender-wide estimate, counted once
+    assert a.discount_pct == 10.0  # (200-180)/200 — not the 65% fabrication
+    assert len(a.winners_all) == 3
+    assert a.valid_bid_count is None  # per-lot; not aggregated to tender level
+
+
+def test_multi_lot_sums_genuinely_per_lot_estimates() -> None:
+    # If the estimates differ across notices, they are per-lot and sum.
+    bundle = {
+        "announcements": [
+            _lot("80,00", "X", ikn="2025/1111111", est="100,00"),
+            _lot("150,00", "Y", ikn="2025/1111111", est="200,00"),
+        ]
+    }
+    a = ingest_bundle(bundle)[0]
+    assert a.lot_count == 2
+    assert a.estimate_try == 300.0  # 100 + 200
+    assert a.contract_try == 230.0  # 80 + 150
+
+
+def test_single_lot_is_unchanged() -> None:
+    a = ingest_bundle({"announcements": [_lot("160.000.000,00", "SOLE İNŞAAT")]})[0]
+    assert a.lot_count == 1
+    assert a.is_partial is False
+    assert a.discount_pct == 20.0  # (200-160)/200

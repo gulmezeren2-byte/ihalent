@@ -29,14 +29,24 @@ def find_result_notice(announcements: list[dict[str, Any]]) -> dict[str, Any] | 
     announcement dict (with its markdown_content), or None if the tender has no
     result notice yet — which is the normal state of an open tender, not an
     error."""
+    notices = find_result_notices(announcements)
+    return notices[0] if notices else None
+
+
+def find_result_notices(announcements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every result notice in the list. A tender awarded in parts (kısmi teklif)
+    publishes one result notice per lot; taking only the first would compare a
+    single lot's contract against the whole tender's estimate and invent a wild
+    discount. So we return them all and let award_from_announcements merge."""
+    out: list[dict[str, Any]] = []
     for ann in announcements:
         type_info = ann.get("type") or {}
         code = str(type_info.get("code", ""))
         desc = str(type_info.get("description", ""))
         is_result = code == RESULT_NOTICE_CODE or "sonuç" in desc.lower()
         if is_result and ann.get("markdown_content"):
-            return ann
-    return None
+            out.append(ann)
+    return out
 
 
 def _tender_context(tender: dict[str, Any] | None) -> dict[str, Any]:
@@ -64,19 +74,73 @@ def award_from_announcements(
     announcements: list[dict[str, Any]], *, tender: dict[str, Any] | None = None
 ) -> Award | None:
     """Turn one tender's announcement list into an Award, or None if it carries
-    no result notice. Context (title/authority/province/type) is taken from the
-    optional `tender` search record, which EKAP keeps separate from the notice
-    body."""
-    notice = find_result_notice(announcements)
-    if notice is None:
+    no result notice. A multi-lot tender's per-lot notices are merged into one
+    award (see _merge_lots). Context (title/authority/province/type) comes from
+    the optional `tender` search record, which EKAP keeps separate from the
+    notice body."""
+    notices = find_result_notices(announcements)
+    if not notices:
         return None
     ctx = _tender_context(tender)
-    return parse_result_notice(
-        str(notice["markdown_content"]),
-        title=ctx.get("title"),
-        authority=ctx.get("authority"),
-        province=ctx.get("province"),
-        tender_type=ctx.get("tender_type", TenderType.UNKNOWN),
+    lots = [
+        parse_result_notice(
+            str(n["markdown_content"]),
+            title=ctx.get("title"),
+            authority=ctx.get("authority"),
+            province=ctx.get("province"),
+            tender_type=ctx.get("tender_type", TenderType.UNKNOWN),
+        )
+        for n in notices
+    ]
+    if len(lots) == 1:
+        return lots[0]
+    return _merge_lots(lots)
+
+
+def _merge_lots(lots: list[Award]) -> Award:
+    """Combine the per-lot result notices of one İKN into a single award.
+
+    Contract prices are per-lot and sum. The estimate needs care: EKAP prints
+    the tender-wide Yaklaşık Maliyet on every lot's notice, so identical
+    estimates are counted once; genuinely per-lot estimates (all different) are
+    summed. Bid counts are per-lot and don't aggregate to a meaningful
+    tender-level number, so they are left unknown rather than misleadingly
+    summed. lot_count records how many parts were merged."""
+    first = lots[0]
+    contracts = [a.contract_try for a in lots if a.contract_try is not None]
+    contract_total = round(sum(contracts), 2) if contracts else None
+
+    estimates = [a.estimate_try for a in lots if a.estimate_try is not None]
+    if not estimates:
+        estimate = None
+    elif all(abs(e - estimates[0]) < 0.01 for e in estimates):
+        estimate = estimates[0]  # one tender-wide estimate repeated per lot
+    else:
+        estimate = round(sum(estimates), 2)  # genuinely per-lot estimates
+
+    winners_all: list[str] = []
+    for a in lots:
+        for w in a.winners_all or ([a.winner] if a.winner else []):
+            if w not in winners_all:
+                winners_all.append(w)
+
+    return Award(
+        ikn=first.ikn,
+        title=first.title,
+        authority=first.authority,
+        province=first.province,
+        tender_type=first.tender_type,
+        estimate_try=estimate,
+        contract_try=contract_total,
+        winner=winners_all[0] if winners_all else None,
+        winners_all=winners_all,
+        is_joint_venture=any(a.is_joint_venture for a in lots),
+        downloaders=None,
+        bid_count=None,
+        valid_bid_count=None,  # per-lot; not meaningful summed to tender level
+        result_date=first.result_date,
+        cancelled=False,
+        lot_count=len(lots),
     )
 
 
