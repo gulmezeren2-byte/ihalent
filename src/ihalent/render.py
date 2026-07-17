@@ -12,12 +12,21 @@ from rich.console import Console
 from rich.table import Table
 
 from ihalent.analytics import (
+    FLAG_ORDER,
     Concentration,
     Coverage,
     DiscountStats,
     FirmProfile,
     Overview,
+    RiskReport,
 )
+
+_FLAG_TEXT = {
+    "single_bid": "single valid bid",
+    "low_discount": "at/near estimate",
+    "no_estimate": "no estimate",
+    "high_dropout": "few bid despite interest",
+}
 
 
 def fmt_try(value: float | None) -> str:
@@ -115,6 +124,40 @@ def render_concentration(conc: Concentration, console: Console) -> None:
     console.print(
         f"[dim]{_coverage_note(conc.coverage, 'awards')}; HHI over win counts, "
         f"each award attributed to its lead winner.[/dim]"
+    )
+
+
+def render_risk(report: RiskReport, console: Console) -> None:
+    console.print("\n[bold]Procurement red flags[/bold]")
+    if not report.flagged:
+        console.print(
+            f"  No awards raised a flag ({_coverage_note(report.coverage, 'awards')})."
+        )
+        return
+    summary = "   ".join(
+        f"{report.counts[f]}x {_FLAG_TEXT.get(f, f)}" for f in FLAG_ORDER if report.counts[f]
+    )
+    console.print(f"  {summary}")
+    table = Table(title="Most-flagged awards", title_justify="left")
+    table.add_column("İKN")
+    table.add_column("authority", overflow="fold")
+    table.add_column("winner", overflow="fold")
+    table.add_column("contract TL", justify="right")
+    table.add_column("kırım", justify="right")
+    table.add_column("flags", overflow="fold")
+    for a in report.flagged[:20]:
+        table.add_row(
+            a.ikn,
+            a.authority or "-",
+            a.winner or "-",
+            fmt_try(a.contract_try),
+            fmt_pct(a.discount_pct),
+            ", ".join(_FLAG_TEXT.get(f, f) for f in a.flags),
+        )
+    console.print(table)
+    console.print(
+        f"[dim]{len(report.flagged)} of {report.coverage.used} awards raised at least one "
+        f"flag. A flag is a reason to look, not a verdict.[/dim]"
     )
 
 

@@ -7,12 +7,12 @@
     "url": "https://github.com/gulmezeren2-byte/ihalent",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "ihalent",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "transport": { "type": "stdio" }
     }
   ]

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ihalent"
-version = "0.2.0"
+version = "0.3.0"
 description = "Turkish public-tender award intelligence: who won, for how much, at what discount, against how many bidders."
 readme = "README.md"
 license = "MIT"

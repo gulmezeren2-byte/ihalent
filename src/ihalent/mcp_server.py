@@ -17,7 +17,14 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ihalent.analytics import by_group, concentration, firm_profile, overview, slice_awards
+from ihalent.analytics import (
+    by_group,
+    concentration,
+    firm_profile,
+    overview,
+    risk_flags,
+    slice_awards,
+)
 from ihalent.ingest import ingest_bundle
 from ihalent.parse import NotAResultNotice, parse_result_notice
 from ihalent.store import load_awards
@@ -73,6 +80,15 @@ def tool_concentration(
     return concentration(subset, label=label, top=top).to_dict()
 
 
+def tool_flags(low_discount_pct: float = 3.0, awards_path: str | None = None) -> dict[str, Any]:
+    """Per-award procurement red flags: a single valid bid, a contract at or above
+    the public estimate, a missing estimate, or a tender many firms took documents
+    for but almost none bid on. None is proof; each is a reason to open the file.
+    Awards raising the most flags (and the most money) come first."""
+    report = risk_flags(load_awards(_resolve(awards_path)), low_discount_pct=low_discount_pct)
+    return report.to_dict()
+
+
 def tool_parse_notice(markdown: str) -> dict[str, Any]:
     """Parse a single result-notice (Sonuç İlanı) markdown into a structured award."""
     try:
@@ -102,6 +118,7 @@ TOOLS = [
     tool_firm,
     tool_discounts,
     tool_concentration,
+    tool_flags,
     tool_parse_notice,
     tool_ingest_bundle,
 ]

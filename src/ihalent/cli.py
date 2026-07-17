@@ -21,7 +21,14 @@ import typer
 from rich.console import Console
 
 import ihalent as _ihalent
-from ihalent.analytics import by_group, concentration, firm_profile, overview, slice_awards
+from ihalent.analytics import (
+    by_group,
+    concentration,
+    firm_profile,
+    overview,
+    risk_flags,
+    slice_awards,
+)
 from ihalent.ingest import ingest_bundle
 from ihalent.parse import NotAResultNotice, parse_result_notice
 from ihalent.render import (
@@ -30,6 +37,7 @@ from ihalent.render import (
     render_concentration,
     render_firm,
     render_overview,
+    render_risk,
 )
 from ihalent.store import dump_awards, load_awards
 
@@ -214,6 +222,32 @@ def concentration_cmd(
         typer.echo(json.dumps(conc.to_dict(), ensure_ascii=True, indent=2))
     else:
         render_concentration(conc, _console)
+
+
+@app.command()
+def flags(
+    awards: Path = typer.Argument(..., metavar="AWARDS.jsonl"),
+    low_discount: float = typer.Option(
+        3.0,
+        "--low-discount",
+        help="Discount %% at/below which a contract counts as 'near the estimate'.",
+    ),
+    as_json: bool = typer.Option(False, "--json", help="Emit the flagged awards as JSON."),
+) -> None:
+    """Per-award procurement red flags — the signals transparency work looks for.
+
+    Flags an award for a single valid bid, a price that landed at or above the
+    public estimate, a missing estimate (so it can't be audited), or a tender many
+    firms took documents for but almost none bid on. None is proof of anything; each
+    is a reason to open the file. Awards raising the most flags (and the most money)
+    come first.
+    """
+    data = _load(awards)
+    report = risk_flags(data, low_discount_pct=low_discount)
+    if as_json:
+        typer.echo(json.dumps(report.to_dict(), ensure_ascii=True, indent=2))
+    else:
+        render_risk(report, _console)
 
 
 @app.command()

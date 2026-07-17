@@ -327,6 +327,117 @@ def slice_awards(
     return subset, "; ".join(parts) if parts else "all awards"
 
 
+# Procurement red-flag names. Stable strings, so a JSON consumer can key on them.
+FLAG_SINGLE_BID = "single_bid"  # one valid bid: no competing offer
+FLAG_LOW_DISCOUNT = "low_discount"  # contract landed at/near the public estimate
+FLAG_NO_ESTIMATE = "no_estimate"  # no published estimate: the award can't be audited
+FLAG_HIGH_DROPOUT = "high_dropout"  # many took the documents, almost none bid validly
+FLAG_ORDER = [FLAG_SINGLE_BID, FLAG_LOW_DISCOUNT, FLAG_NO_ESTIMATE, FLAG_HIGH_DROPOUT]
+
+
+@dataclass
+class AwardFlags:
+    ikn: str
+    title: str | None
+    authority: str | None
+    winner: str | None
+    contract_try: float | None
+    discount_pct: float | None
+    flags: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ikn": self.ikn,
+            "title": self.title,
+            "authority": self.authority,
+            "winner": self.winner,
+            "contract_try": (
+                round(self.contract_try, 2) if self.contract_try is not None else None
+            ),
+            "discount_pct": self.discount_pct,
+            "flags": self.flags,
+        }
+
+
+@dataclass
+class RiskReport:
+    coverage: Coverage
+    low_discount_pct: float
+    counts: dict[str, int]
+    flagged: list[AwardFlags] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "coverage": self.coverage.to_dict(),
+            "low_discount_pct": self.low_discount_pct,
+            "counts": self.counts,
+            "flagged_count": len(self.flagged),
+            "flagged": [f.to_dict() for f in self.flagged],
+        }
+
+
+def _award_flags(a: Award, low_discount_pct: float) -> list[str]:
+    flags: list[str] = []
+    if a.single_bid:  # True only when the valid-bid count is known and <= 1
+        flags.append(FLAG_SINGLE_BID)
+    if a.discount_pct is not None and a.discount_pct < low_discount_pct:
+        # Includes negative discounts (contract above estimate) — an even louder
+        # version of the same signal: no downward price pressure.
+        flags.append(FLAG_LOW_DISCOUNT)
+    if a.estimate_try is None:
+        flags.append(FLAG_NO_ESTIMATE)
+    if (
+        a.downloaders is not None
+        and a.downloaders >= 5
+        and a.valid_bid_count is not None
+        and a.valid_bid_count / a.downloaders < 0.2
+    ):
+        flags.append(FLAG_HIGH_DROPOUT)
+    return flags
+
+
+def risk_flags(awards: Iterable[Award], *, low_discount_pct: float = 3.0) -> RiskReport:
+    """Per-award procurement red flags — the signals transparency work looks for.
+
+    None of these is proof of anything; each is a reason to read the file. A
+    single valid bid, a contract that landed on top of the public estimate, no
+    published estimate at all, or a tender many firms took documents for but
+    almost none bid on — these are the classic markers of weak or absent
+    competition. An award can raise several at once, and the ones that raise the
+    most (and involve the most money) sort to the top. The coverage says how many
+    awards were examined; a flag count is only as meaningful as its denominator."""
+    considered = 0
+    counts: dict[str, int] = dict.fromkeys(FLAG_ORDER, 0)
+    flagged: list[AwardFlags] = []
+    for a in awards:
+        if a.cancelled:
+            continue
+        considered += 1
+        flags = _award_flags(a, low_discount_pct)
+        if not flags:
+            continue
+        for f in flags:
+            counts[f] += 1
+        flagged.append(
+            AwardFlags(
+                ikn=a.ikn,
+                title=a.title,
+                authority=a.authority,
+                winner=a.winner,
+                contract_try=a.contract_try,
+                discount_pct=a.discount_pct,
+                flags=flags,
+            )
+        )
+    flagged.sort(key=lambda f: (-len(f.flags), -(f.contract_try or 0.0), f.ikn))
+    return RiskReport(
+        coverage=Coverage(considered=considered, used=considered),
+        low_discount_pct=low_discount_pct,
+        counts=counts,
+        flagged=flagged,
+    )
+
+
 def by_group(
     awards: Iterable[Award], key: str, *, min_awards: int = 1
 ) -> list[DiscountStats]:

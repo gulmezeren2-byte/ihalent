@@ -11,6 +11,7 @@ from ihalent.analytics import (
     discount_stats,
     firm_profile,
     overview,
+    risk_flags,
     slice_awards,
 )
 from ihalent.model import Award, TenderType
@@ -191,3 +192,52 @@ def test_concentration_within_one_authority(dataset: list[Award]) -> None:
     assert conc.coverage.considered == 2
     assert conc.distinct_firms == 1
     assert conc.hhi == 1.0
+
+
+# -- risk flags -------------------------------------------------------------
+
+
+def test_risk_flags_single_bid_and_no_estimate(dataset: list[Award]) -> None:
+    report = risk_flags(dataset)
+    assert report.coverage.considered == 4  # the cancelled award is excluded
+    assert report.counts["single_bid"] == 1  # 2025/2 has one valid bid
+    assert report.counts["no_estimate"] == 1  # 2025/4 has no estimate
+    assert report.counts["low_discount"] == 0  # nothing below 3% by default
+    # both raise one flag; sorted by contract value desc: 1000 (2025/2) then 900 (2025/4)
+    assert [f.ikn for f in report.flagged] == ["2025/2", "2025/4"]
+
+
+def test_risk_flags_low_discount_threshold(dataset: list[Award]) -> None:
+    report = risk_flags(dataset, low_discount_pct=15.0)
+    low = {f.ikn for f in report.flagged if "low_discount" in f.flags}
+    assert low == {"2025/3"}  # 10% < 15%; the 20% and 50% discounts clear it
+
+
+def test_risk_flags_negative_discount_counts_as_low() -> None:
+    a = award(ikn="x", estimate_try=100.0, contract_try=120.0, valid_bid_count=5)
+    report = risk_flags([a])
+    assert "low_discount" in report.flagged[0].flags  # contract above estimate
+
+
+def test_risk_flags_high_dropout() -> None:
+    a = award(ikn="x", downloaders=10, valid_bid_count=1, estimate_try=100.0, contract_try=50.0)
+    flags = risk_flags([a]).flagged[0].flags
+    assert "high_dropout" in flags  # 1/10 valid-bid ratio
+    assert "single_bid" in flags
+
+
+def test_risk_flags_clean_award_raises_nothing() -> None:
+    a = award(
+        ikn="x", estimate_try=1000.0, contract_try=700.0, valid_bid_count=5, downloaders=6
+    )
+    report = risk_flags([a])
+    assert report.flagged == []
+    assert report.coverage.considered == 1
+
+
+def test_risk_flags_most_flags_first() -> None:
+    two = award(ikn="two", estimate_try=None, contract_try=100.0, valid_bid_count=1)
+    one = award(ikn="one", estimate_try=1000.0, contract_try=990.0, valid_bid_count=5)
+    report = risk_flags([one, two])
+    assert report.flagged[0].ikn == "two"  # no_estimate + single_bid = 2 flags
+    assert len(report.flagged[0].flags) == 2

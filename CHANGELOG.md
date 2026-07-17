@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-07-17
+
+- **Procurement red flags (`ihalent flags`)**: per-award risk signals used in transparency
+  work — a single valid bid, a contract that landed at or above the public estimate (no
+  downward price pressure), a missing estimate (so it can't be audited), or a tender many
+  firms took documents for but almost none bid on. None is proof of anything; each is a
+  reason to open the file. Reports per-flag counts and the most-flagged awards (most flags,
+  then most money, first), with the coverage it stands on. Exposed as a CLI command, a
+  `flags` MCP tool, and `ihalent.analytics.risk_flags`.
+
 ## 0.2.0 — 2026-07-17
 
 - **Winner concentration (`ihalent concentration`)**: the Herfindahl-Hirschman Index over a

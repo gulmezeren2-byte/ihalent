@@ -11,6 +11,7 @@ from ihalent.mcp_server import (
     tool_concentration,
     tool_discounts,
     tool_firm,
+    tool_flags,
     tool_ingest_bundle,
     tool_overview,
     tool_parse_notice,
@@ -69,6 +70,14 @@ def test_concentration_by_authority(dataset_path: str) -> None:
     assert result["label"] == "authority ~ 'A'"
     assert result["distinct_firms"] == 1  # only ACME sits in authority A
     assert result["hhi"] == 1.0
+
+
+def test_flags(dataset_path: str) -> None:
+    result = tool_flags(awards_path=dataset_path)
+    # BETA (2025/2) has a single valid bid; ACME (2025/1) is clean
+    assert result["counts"]["single_bid"] == 1
+    assert result["flagged_count"] == 1
+    assert result["flagged"][0]["ikn"] == "2025/2"
 
 
 def test_parse_notice() -> None:
