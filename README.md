@@ -18,7 +18,7 @@ authority actually award." ihalent turns those notices into structured records a
 exactly those questions — firm histories, discount (kırım) distributions, and competition
 metrics — with every number traceable back to the notice it came from.
 
-![ihalent overview and discount-by-authority over nine real December-2025 awards](docs/demo.svg)
+![ihalent overview, winner concentration and procurement red flags over nine real December-2025 awards](docs/demo.svg)
 
 That is real output over nine real December-2025 construction awards (in
 [`examples/`](examples/)). The `-2.96%` at the top of the range is not a bug: Istanbul
