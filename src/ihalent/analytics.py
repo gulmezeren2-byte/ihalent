@@ -1,0 +1,280 @@
+"""Analytics over a set of awards.
+
+Three questions this layer answers, and one rule it never breaks.
+
+The questions:
+  * Firm history — what has one company won, for how much, at what discount?
+  * Discount distribution — how far below estimate do contracts land, sliced
+    by authority, province or tender type?
+  * Competition — how many bidders show up, and how often does exactly one?
+
+The rule: every statistic reports the ground it stands on. A mean discount is
+meaningless without "over how many awards, and how many were dropped for a
+missing estimate." So each result carries an `Coverage` — total considered,
+used, and excluded — and the renderer always prints it. This is the same
+honesty discipline as the andon project: a number without its denominator is
+an opinion.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
+from statistics import median
+
+from ihalent.model import Award, TenderType
+from ihalent.normalize import display_name, normalize_company
+
+
+@dataclass
+class Coverage:
+    considered: int
+    used: int
+
+    @property
+    def excluded(self) -> int:
+        return self.considered - self.used
+
+    def to_dict(self) -> dict[str, int]:
+        return {"considered": self.considered, "used": self.used, "excluded": self.excluded}
+
+
+def _discounts(awards: Iterable[Award]) -> tuple[list[float], Coverage]:
+    considered = 0
+    values: list[float] = []
+    for a in awards:
+        if a.cancelled:
+            continue
+        considered += 1
+        d = a.discount_pct
+        if d is not None:
+            values.append(d)
+    return values, Coverage(considered=considered, used=len(values))
+
+
+@dataclass
+class DiscountStats:
+    label: str
+    coverage: Coverage
+    mean: float | None = None
+    median: float | None = None
+    min: float | None = None
+    max: float | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "label": self.label,
+            "coverage": self.coverage.to_dict(),
+            "mean": self.mean,
+            "median": self.median,
+            "min": self.min,
+            "max": self.max,
+        }
+
+
+def discount_stats(awards: Iterable[Award], label: str = "all awards") -> DiscountStats:
+    values, coverage = _discounts(awards)
+    if not values:
+        return DiscountStats(label=label, coverage=coverage)
+    return DiscountStats(
+        label=label,
+        coverage=coverage,
+        mean=round(sum(values) / len(values), 2),
+        median=round(median(values), 2),
+        min=round(min(values), 2),
+        max=round(max(values), 2),
+    )
+
+
+@dataclass
+class FirmProfile:
+    key: str
+    name: str
+    wins: int
+    total_contract_try: float
+    known_contract_count: int  # wins whose contract value was published
+    discount: DiscountStats
+    joint_ventures: int
+    distinct_spellings: int  # how many normalized company keys the query matched
+    authorities: dict[str, int] = field(default_factory=dict)
+    provinces: dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "key": self.key,
+            "name": self.name,
+            "wins": self.wins,
+            "total_contract_try": round(self.total_contract_try, 2),
+            "known_contract_count": self.known_contract_count,
+            "discount": self.discount.to_dict(),
+            "joint_ventures": self.joint_ventures,
+            "distinct_spellings": self.distinct_spellings,
+            "top_authorities": dict(
+                sorted(self.authorities.items(), key=lambda kv: -kv[1])[:5]
+            ),
+            "provinces": dict(sorted(self.provinces.items(), key=lambda kv: -kv[1])),
+        }
+
+
+def firm_profile(awards: Sequence[Award], query: str, *, exact: bool = False) -> FirmProfile | None:
+    """Everything one firm won across the dataset.
+
+    `query` is normalized and matched against each winner's normalized key.
+    By default the match is a substring ("acme" finds "acme insaat ltd"), which
+    is what a human searching a name wants; pass exact=True to require the whole
+    key to match. Either way, `distinct_spellings` reports how many different
+    company keys were folded in, so an over-broad query is visible rather than
+    silently merging unrelated firms."""
+    key = normalize_company(query)
+    if not key:
+        return None
+    matched: list[Award] = []
+    raw_names: list[str] = []
+    matched_keys: set[str] = set()
+    for a in awards:
+        if a.cancelled:
+            continue
+        for member in a.winners_all or ([a.winner] if a.winner else []):
+            member_key = normalize_company(member)
+            hit = member_key == key if exact else key in member_key
+            if hit:
+                matched.append(a)
+                raw_names.append(member)
+                matched_keys.add(member_key)
+                break
+    if not matched:
+        return None
+
+    total = sum(a.contract_try for a in matched if a.contract_try is not None)
+    known = sum(1 for a in matched if a.contract_try is not None)
+    authorities: dict[str, int] = {}
+    provinces: dict[str, int] = {}
+    for a in matched:
+        if a.authority:
+            authorities[a.authority] = authorities.get(a.authority, 0) + 1
+        if a.province:
+            provinces[a.province] = provinces.get(a.province, 0) + 1
+
+    return FirmProfile(
+        key=key,
+        name=display_name(raw_names),
+        wins=len(matched),
+        total_contract_try=total,
+        known_contract_count=known,
+        discount=discount_stats(matched, label=display_name(raw_names)),
+        joint_ventures=sum(1 for a in matched if a.is_joint_venture),
+        distinct_spellings=len(matched_keys),
+        authorities=authorities,
+        provinces=provinces,
+    )
+
+
+@dataclass
+class CompetitionStats:
+    coverage: Coverage
+    mean_bids: float | None = None
+    median_bids: float | None = None
+    single_bid_share: float | None = None  # fraction of awards with <=1 valid bid
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "coverage": self.coverage.to_dict(),
+            "mean_bids": self.mean_bids,
+            "median_bids": self.median_bids,
+            "single_bid_share": self.single_bid_share,
+        }
+
+
+def competition_stats(awards: Iterable[Award]) -> CompetitionStats:
+    considered = 0
+    counts: list[int] = []
+    singles = 0
+    for a in awards:
+        if a.cancelled:
+            continue
+        considered += 1
+        if a.valid_bid_count is not None:
+            counts.append(a.valid_bid_count)
+            if a.valid_bid_count <= 1:
+                singles += 1
+    coverage = Coverage(considered=considered, used=len(counts))
+    if not counts:
+        return CompetitionStats(coverage=coverage)
+    return CompetitionStats(
+        coverage=coverage,
+        mean_bids=round(sum(counts) / len(counts), 2),
+        median_bids=round(median(counts), 2),
+        single_bid_share=round(singles / len(counts), 3),
+    )
+
+
+def by_group(
+    awards: Iterable[Award], key: str, *, min_awards: int = 1
+) -> list[DiscountStats]:
+    """Discount stats grouped by 'authority', 'province' or 'tender_type'.
+
+    Groups thinner than `min_awards` are still returned but the caller can
+    filter them; a mean over two awards is not a trend and the coverage says so.
+    """
+    getters = {
+        "authority": lambda a: a.authority,
+        "province": lambda a: a.province,
+        "tender_type": lambda a: (
+            a.tender_type.value if a.tender_type != TenderType.UNKNOWN else None
+        ),
+    }
+    if key not in getters:
+        raise ValueError(f"group key must be one of {sorted(getters)}, got {key!r}")
+    get = getters[key]
+
+    buckets: dict[str, list[Award]] = {}
+    for a in awards:
+        if a.cancelled:
+            continue
+        g = get(a)
+        if g:
+            buckets.setdefault(g, []).append(a)
+
+    out = [discount_stats(v, label=k) for k, v in buckets.items() if len(v) >= min_awards]
+    out.sort(key=lambda s: (s.mean if s.mean is not None else -1), reverse=True)
+    return out
+
+
+@dataclass
+class Overview:
+    total: int
+    cancelled: int
+    awarded: int
+    discount: DiscountStats
+    competition: CompetitionStats
+    total_contract_try: float
+    missing_estimate: int
+    missing_bid_count: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "total": self.total,
+            "cancelled": self.cancelled,
+            "awarded": self.awarded,
+            "discount": self.discount.to_dict(),
+            "competition": self.competition.to_dict(),
+            "total_contract_try": round(self.total_contract_try, 2),
+            "data_gaps": {
+                "missing_estimate": self.missing_estimate,
+                "missing_bid_count": self.missing_bid_count,
+            },
+        }
+
+
+def overview(awards: Sequence[Award]) -> Overview:
+    awarded = [a for a in awards if not a.cancelled]
+    return Overview(
+        total=len(awards),
+        cancelled=sum(1 for a in awards if a.cancelled),
+        awarded=len(awarded),
+        discount=discount_stats(awarded),
+        competition=competition_stats(awarded),
+        total_contract_try=sum(a.contract_try for a in awarded if a.contract_try is not None),
+        missing_estimate=sum(1 for a in awarded if a.estimate_try is None),
+        missing_bid_count=sum(1 for a in awarded if a.valid_bid_count is None),
+    )
