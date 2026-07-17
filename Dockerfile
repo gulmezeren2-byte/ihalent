@@ -2,10 +2,11 @@
 #
 # The image runs `ihalent-mcp` over stdio, so any MCP-speaking runtime — Claude
 # Desktop/Code, or Glama's in-browser inspector — can query tender-award
-# intelligence without a local Python install:
+# intelligence without a local Python install. Point it at a dataset with the
+# IHALENT_AWARDS env var (tool introspection works without one):
 #
 #   docker build -t ihalent .
-#   docker run --rm -i ihalent
+#   docker run --rm -i -e IHALENT_AWARDS=/data/awards.jsonl -v "$PWD:/data:ro" ihalent
 #
 # (For the CLI instead of the server, override the entrypoint:
 #   docker run --rm -v "$PWD:/work" -w /work --entrypoint ihalent ihalent --help)

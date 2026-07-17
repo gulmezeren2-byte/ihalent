@@ -140,6 +140,9 @@ you point it at:
 IHALENT_AWARDS=awards.jsonl ihalent-mcp
 ```
 
+No local Python? The [`Dockerfile`](Dockerfile) builds the same server:
+`docker build -t ihalent . && docker run --rm -i -e IHALENT_AWARDS=/data/awards.jsonl -v "$PWD:/data:ro" ihalent`.
+
 Pair it with ihale-mcp and an agent can collect notices and reason across them in one
 session: ihale-mcp fetches, ihalent structures and aggregates. The Python API
 (`ihalent.ingest_bundle`, `ihalent.analytics.firm_profile`) is three calls deep if you'd
