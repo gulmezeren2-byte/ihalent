@@ -6,6 +6,10 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+> Built on top of **[saidsurucu/ihale-mcp](https://github.com/saidsurucu/ihale-mcp)** — ihale-mcp reaches EKAP; ihalent structures and analyzes what it returns.
+
+<!-- mcp-name: io.github.gulmezeren2-byte/ihalent -->
+
 Every public tender in Turkey ends with a *Sonuç İlanı* — a result notice that states the
 estimate, the contract price, the winner, and how many firms bid. The notices are public.
 They are also one at a time, unstructured, and impossible to reason across: you cannot ask
