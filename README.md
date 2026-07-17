@@ -18,23 +18,13 @@ authority actually award." ihalent turns those notices into structured records a
 exactly those questions — firm histories, discount (kırım) distributions, and competition
 metrics — with every number traceable back to the notice it came from.
 
-```
-$ ihalent overview awards.jsonl
+![ihalent overview and discount-by-authority over nine real December-2025 awards](docs/demo.svg)
 
-Dataset overview
-  4 tenders: 4 awarded, 0 cancelled
-  total awarded value: 677.878.066,48 TL
-  Discount (kırım): mean 18.22%  median 20.99%  min -2.96%  max 33.87%
-  based on all 4 awards.
-  competition: 5.75 valid bids on average (median 4.0); 0.0% had a single valid bid
-  data gaps: 0 awards without an estimate, 0 without a bid count.
-```
-
-That is real output over four real December-2025 awards (in
-[`examples/`](examples/)). The `-2.96%` is not a bug: Istanbul University awarded a
-615-million-lira campus job at **2.96% above** its own estimate, through an emergency
-"pazarlık" procedure — a contract signed over the public estimate, which is precisely the
-kind of thing that should be easy to see and currently is not.
+That is real output over nine real December-2025 construction awards (in
+[`examples/`](examples/)). The `-2.96%` at the top of the range is not a bug: Istanbul
+University awarded a 615-million-lira campus job at **2.96% above** its own estimate,
+through an emergency "pazarlık" procedure — a contract signed over the public estimate,
+which is precisely the kind of thing that should be easy to see and currently is not.
 
 ## Why this exists
 
@@ -92,10 +82,10 @@ of a tool like this is refusing to guess.
 ## Install
 
 ```
-pip install git+https://github.com/gulmezeren2-byte/ihalent
+pip install ihalent           # add [mcp] for the MCP server: pip install "ihalent[mcp]"
 ```
 
-A PyPI release (`pip install ihalent`) follows once the first users have kicked the tires.
+Or from source: `pip install git+https://github.com/gulmezeren2-byte/ihalent`.
 
 ## The workflow
 
@@ -131,6 +121,7 @@ ihalent overview examples/sample-awards.jsonl
 | `ihalent overview AWARDS` | value, discount, competition and the data gaps of a dataset |
 | `ihalent firm AWARDS "NAME"` | one company's wins, total value, discount, and where it wins |
 | `ihalent discounts AWARDS --by X` | mean/median discount grouped by authority, province or tender_type |
+| `ihalent single-bid AWARDS` | awards with a single valid bid — no real competition (a watchdog flag) |
 | `ihalent parse NOTICE.md` | one result notice → structured JSON |
 | `ihalent ingest BUNDLE.json` | collected ihale-mcp/EKAP output → awards JSONL |
 

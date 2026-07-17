@@ -136,6 +136,17 @@ def test_cli_ingest_no_result_notice(tmp_path: Path) -> None:
     assert result.exit_code == 1
 
 
+def test_cli_single_bid(tmp_path: Path) -> None:
+    path = tmp_path / "awards.jsonl"
+    dump_awards(sample_awards(), path)
+    result = runner.invoke(app, ["single-bid", str(path), "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["with_known_bid_count"] == 2
+    assert payload["single_bid_count"] == 1  # BETA AŞ has a single valid bid
+    assert payload["awards"][0]["winner"] == "BETA AŞ"
+
+
 def test_cli_version() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0

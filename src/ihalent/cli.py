@@ -24,7 +24,7 @@ import ihalent as _ihalent
 from ihalent.analytics import by_group, firm_profile, overview
 from ihalent.ingest import ingest_bundle
 from ihalent.parse import NotAResultNotice, parse_result_notice
-from ihalent.render import fmt_pct, render_firm, render_overview
+from ihalent.render import fmt_pct, fmt_try, render_firm, render_overview
 from ihalent.store import dump_awards, load_awards
 
 app = typer.Typer(
@@ -129,6 +129,56 @@ def discounts(
         )
     _console.print(table)
     _console.print("[dim]awards column: used / considered (excluded lack an estimate).[/dim]")
+
+
+@app.command("single-bid")
+def single_bid_cmd(
+    awards: Path = typer.Argument(..., metavar="AWARDS.jsonl"),
+    as_json: bool = typer.Option(False, "--json", help="Emit the flagged awards as JSON."),
+) -> None:
+    """List awards with a single valid bid — the ones with no real competition.
+
+    A single-bid award is a flag procurement watchdogs care about: the winner
+    faced no competing valid offer. Only awards whose bid count was published
+    are considered, and the report says how many that was.
+    """
+    data = _load(awards)
+    live = [a for a in data if not a.cancelled]
+    known = [a for a in live if a.valid_bid_count is not None]
+    flagged = [a for a in known if a.single_bid]
+    if as_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "considered": len(live),
+                    "with_known_bid_count": len(known),
+                    "single_bid_count": len(flagged),
+                    "awards": [a.to_dict() for a in flagged],
+                },
+                ensure_ascii=True,
+                indent=2,
+            )
+        )
+        return
+    if not flagged:
+        _console.print(
+            f"No single-bid awards among the {len(known)} with a published bid count."
+        )
+        return
+    from rich.table import Table
+
+    table = Table(title="Single-bid awards — no competing valid offer", title_justify="left")
+    table.add_column("İKN")
+    table.add_column("authority", overflow="fold")
+    table.add_column("winner", overflow="fold")
+    table.add_column("contract TL", justify="right")
+    for a in flagged:
+        table.add_row(a.ikn, a.authority or "-", a.winner or "-", fmt_try(a.contract_try))
+    _console.print(table)
+    _console.print(
+        f"[dim]{len(flagged)} of {len(known)} awards with a published bid count "
+        f"had a single valid bid.[/dim]"
+    )
 
 
 @app.command()
