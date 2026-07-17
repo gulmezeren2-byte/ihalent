@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install
+        run: uv sync --dev
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Types
+        run: uv run mypy src
+
+      - name: Tests
+        run: uv run pytest
+
+      - name: The bundled example must rebuild and analyze cleanly
+        shell: bash
+        run: |
+          uv run python examples/build_sample.py
+          uv run ihalent overview examples/sample-awards.jsonl
+          # the negative-discount case must survive the round trip
+          uv run ihalent overview examples/sample-awards.jsonl --json | grep -q '"min": -2.96'
