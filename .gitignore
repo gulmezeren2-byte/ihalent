@@ -1,0 +1,22 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# editors / os
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# local award data (users collect their own; only the example ships)
+/awards.jsonl
+/bundle.json
