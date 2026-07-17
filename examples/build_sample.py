@@ -15,11 +15,17 @@ in the notice body (authority, province, tender type). Re-run after editing:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from ihalent.model import TenderType
 from ihalent.parse import parse_result_notice
 from ihalent.store import dump_awards
+
+# Winner names contain Turkish letters; on a legacy Windows console code page a
+# plain print() of them raises UnicodeEncodeError. Degrade instead of crashing.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 HERE = Path(__file__).parent
 

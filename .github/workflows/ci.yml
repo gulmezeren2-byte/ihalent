@@ -36,6 +36,6 @@ jobs:
         shell: bash
         run: |
           uv run python examples/build_sample.py
-          uv run ihalent overview examples/sample-awards.jsonl
-          # the negative-discount case must survive the round trip
+          # --json is ASCII by contract, so this is safe on any console code page;
+          # the negative-discount case must survive the round trip.
           uv run ihalent overview examples/sample-awards.jsonl --json | grep -q '"min": -2.96'
