@@ -1,0 +1,28 @@
+name: Publish to PyPI
+
+# Fires when you cut a GitHub Release. Uses PyPI Trusted Publishing (OIDC), so
+# there is no token to store: configure ihalent as a trusted publisher on PyPI
+# once (Project → Publishing → GitHub, workflow "publish.yml"), then every
+# release ships itself.
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        run: uv build
+
+      - name: Publish
+        run: uv publish
