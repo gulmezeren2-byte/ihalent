@@ -7,9 +7,11 @@ import pytest
 from ihalent.analytics import (
     by_group,
     competition_stats,
+    concentration,
     discount_stats,
     firm_profile,
     overview,
+    slice_awards,
 )
 from ihalent.model import Award, TenderType
 
@@ -106,3 +108,86 @@ def test_empty_dataset_is_honest() -> None:
     assert ov.awarded == 0
     assert ov.discount.mean is None
     assert ov.discount.coverage.used == 0
+
+
+# -- concentration ----------------------------------------------------------
+
+
+def test_concentration_hhi_and_distinct_firms(dataset: list[Award]) -> None:
+    conc = concentration(dataset)
+    # 4 awarded, 2 firms (ACME x2, BETA x2) -> shares 0.5/0.5 -> HHI 0.5
+    assert conc.coverage.considered == 4  # the cancelled award is excluded
+    assert conc.coverage.used == 4
+    assert conc.distinct_firms == 2
+    assert conc.hhi == 0.5
+
+
+def test_concentration_folds_spelling_variants(dataset: list[Award]) -> None:
+    conc = concentration(dataset)
+    acme = next(f for f in conc.top if "ACME" in f.name.upper())
+    assert acme.wins == 2  # two ACME spellings counted as one firm
+    assert acme.contract_try == 1800.0
+
+
+def test_concentration_top_sorted_ties_broken_by_value(dataset: list[Award]) -> None:
+    conc = concentration(dataset)
+    # both firms have 2 wins; BETA's summed value (5400) beats ACME's (1800)
+    assert conc.top[0].wins == 2
+    assert "BETA" in conc.top[0].name.upper()
+    assert conc.top[0].win_share == 0.5
+
+
+def test_concentration_single_firm_is_total(dataset: list[Award]) -> None:
+    solo = [award(ikn="x", winner="ONLY CO", winners_all=["ONLY CO"], contract_try=100.0)]
+    conc = concentration(solo)
+    assert conc.hhi == 1.0
+    assert conc.distinct_firms == 1
+
+
+def test_concentration_without_a_winner_is_covered_not_counted() -> None:
+    conc = concentration([award(ikn="x", winner=None, winners_all=[])])
+    assert conc.coverage.considered == 1
+    assert conc.coverage.used == 0
+    assert conc.hhi is None
+
+
+def test_concentration_empty_is_honest() -> None:
+    conc = concentration([])
+    assert conc.hhi is None
+    assert conc.distinct_firms == 0
+    assert conc.coverage.used == 0
+
+
+# -- slice_awards -----------------------------------------------------------
+
+
+def test_slice_by_authority(dataset: list[Award]) -> None:
+    subset, label = slice_awards(dataset, authority="A")
+    assert {a.ikn for a in subset} == {"2025/1", "2025/2", "2025/5"}
+    assert label == "authority ~ 'A'"
+
+
+def test_slice_authority_is_case_insensitive_substring(dataset: list[Award]) -> None:
+    subset, _ = slice_awards(dataset, authority="b")
+    assert {a.ikn for a in subset} == {"2025/3", "2025/4"}
+
+
+def test_slice_by_province(dataset: list[Award]) -> None:
+    subset, label = slice_awards(dataset, province="İzmir")
+    assert {a.ikn for a in subset} == {"2025/3", "2025/4"}
+    assert "province" in label
+
+
+def test_slice_no_filter_returns_all(dataset: list[Award]) -> None:
+    subset, label = slice_awards(dataset)
+    assert len(subset) == len(dataset)
+    assert label == "all awards"
+
+
+def test_concentration_within_one_authority(dataset: list[Award]) -> None:
+    subset, label = slice_awards(dataset, authority="A")
+    conc = concentration(subset, label=label)
+    # authority A: two ACME wins (the cancelled one drops out) -> one firm, HHI 1
+    assert conc.coverage.considered == 2
+    assert conc.distinct_firms == 1
+    assert conc.hhi == 1.0

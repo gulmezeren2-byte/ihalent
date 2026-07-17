@@ -21,10 +21,16 @@ import typer
 from rich.console import Console
 
 import ihalent as _ihalent
-from ihalent.analytics import by_group, firm_profile, overview
+from ihalent.analytics import by_group, concentration, firm_profile, overview, slice_awards
 from ihalent.ingest import ingest_bundle
 from ihalent.parse import NotAResultNotice, parse_result_notice
-from ihalent.render import fmt_pct, fmt_try, render_firm, render_overview
+from ihalent.render import (
+    fmt_pct,
+    fmt_try,
+    render_concentration,
+    render_firm,
+    render_overview,
+)
 from ihalent.store import dump_awards, load_awards
 
 app = typer.Typer(
@@ -179,6 +185,35 @@ def single_bid_cmd(
         f"[dim]{len(flagged)} of {len(known)} awards with a published bid count "
         f"had a single valid bid.[/dim]"
     )
+
+
+@app.command("concentration")
+def concentration_cmd(
+    awards: Path = typer.Argument(..., metavar="AWARDS.jsonl"),
+    authority: str | None = typer.Option(
+        None, "--authority", help="Limit to authorities whose name contains this text."
+    ),
+    province: str | None = typer.Option(
+        None, "--province", help="Limit to a province (substring match)."
+    ),
+    top: int = typer.Option(5, "--top", help="How many leading firms to list."),
+    as_json: bool = typer.Option(False, "--json", help="Emit as JSON."),
+) -> None:
+    """Winner concentration (HHI) over a dataset, or within one authority.
+
+    single-bid flags a lack of competition *within* a tender; this flags it
+    *across* tenders — whether the same few firms win everything a buyer puts
+    out. Reports the Herfindahl-Hirschman Index (0..1) over win counts and the
+    leading firms, with the coverage it stands on. High concentration in a small
+    slice is arithmetic, not evidence; it is a place to look, not a conclusion.
+    """
+    data = _load(awards)
+    subset, label = slice_awards(data, authority=authority, province=province)
+    conc = concentration(subset, label=label, top=top)
+    if as_json:
+        typer.echo(json.dumps(conc.to_dict(), ensure_ascii=True, indent=2))
+    else:
+        render_concentration(conc, _console)
 
 
 @app.command()

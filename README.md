@@ -122,6 +122,7 @@ ihalent overview examples/sample-awards.jsonl
 | `ihalent firm AWARDS "NAME"` | one company's wins, total value, discount, and where it wins |
 | `ihalent discounts AWARDS --by X` | mean/median discount grouped by authority, province or tender_type |
 | `ihalent single-bid AWARDS` | awards with a single valid bid — no real competition (a watchdog flag) |
+| `ihalent concentration AWARDS [--authority X]` | winner concentration (HHI) — do the same few firms win everything? |
 | `ihalent parse NOTICE.md` | one result notice → structured JSON |
 | `ihalent ingest BUNDLE.json` | collected ihale-mcp/EKAP output → awards JSONL |
 
@@ -133,8 +134,8 @@ output with stable fields, an exit code that means something, and a firm-name ma
 folds spelling variants so an agent doesn't have to.
 
 There is a native **MCP server** (`pip install 'ihalent[mcp]'`) that exposes the analytics
-as tools — `overview`, `firm`, `discounts`, `parse_notice`, `ingest_bundle` — over a dataset
-you point it at:
+as tools — `overview`, `firm`, `discounts`, `concentration`, `parse_notice`, `ingest_bundle`
+— over a dataset you point it at:
 
 ```
 IHALENT_AWARDS=awards.jsonl ihalent-mcp

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 — 2026-07-17
+
+- **Winner concentration (`ihalent concentration`)**: the Herfindahl-Hirschman Index over a
+  dataset, or a slice of it by `--authority` / `--province`, with the leading firms and their
+  win shares. Where single-bid share measures competition *within* a tender, this measures it
+  *across* tenders — are the same few firms winning everything a buyer puts out? Spelling
+  variants fold together, each award is attributed to its lead winner, and the coverage
+  travels with the number (high concentration in a thin slice is arithmetic, not evidence).
+  Exposed three ways: the CLI command, a `concentration` MCP tool, and
+  `ihalent.analytics.concentration`.
+- `slice_awards` helper (authority/province substring filter) shared by the CLI and MCP
+  server, so a "concentration within this authority" query means the same thing in both.
+
 ## 0.1.0 — 2026-07-17
 
 First public release.

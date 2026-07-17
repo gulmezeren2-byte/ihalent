@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from ihalent.mcp_server import (
+    tool_concentration,
     tool_discounts,
     tool_firm,
     tool_ingest_bundle,
@@ -53,6 +54,21 @@ def test_firm_not_found(dataset_path: str) -> None:
 def test_discounts(dataset_path: str) -> None:
     result = tool_discounts("authority", dataset_path)
     assert {g["label"] for g in result["groups"]} == {"A", "B"}
+
+
+def test_concentration(dataset_path: str) -> None:
+    result = tool_concentration(awards_path=dataset_path)
+    # two firms, one win each -> shares 0.5/0.5 -> HHI 0.5
+    assert result["distinct_firms"] == 2
+    assert result["hhi"] == 0.5
+    assert result["coverage"]["used"] == 2
+
+
+def test_concentration_by_authority(dataset_path: str) -> None:
+    result = tool_concentration(authority="A", awards_path=dataset_path)
+    assert result["label"] == "authority ~ 'A'"
+    assert result["distinct_firms"] == 1  # only ACME sits in authority A
+    assert result["hhi"] == 1.0
 
 
 def test_parse_notice() -> None:

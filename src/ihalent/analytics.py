@@ -208,6 +208,125 @@ def competition_stats(awards: Iterable[Award]) -> CompetitionStats:
     )
 
 
+@dataclass
+class FirmShare:
+    key: str
+    name: str
+    wins: int
+    contract_try: float  # summed known contract value across those wins
+    win_share: float  # wins / total attributed wins (0..1)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "key": self.key,
+            "name": self.name,
+            "wins": self.wins,
+            "contract_try": round(self.contract_try, 2),
+            "win_share": round(self.win_share, 4),
+        }
+
+
+@dataclass
+class Concentration:
+    label: str
+    coverage: Coverage
+    distinct_firms: int
+    hhi: float | None = None  # 0..1 over win counts; None if nothing usable
+    top: list[FirmShare] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "label": self.label,
+            "coverage": self.coverage.to_dict(),
+            "distinct_firms": self.distinct_firms,
+            "hhi": self.hhi,
+            "top": [f.to_dict() for f in self.top],
+        }
+
+
+def _lead_winner(a: Award) -> str | None:
+    return a.winner or (a.winners_all[0] if a.winners_all else None)
+
+
+def concentration(
+    awards: Iterable[Award], label: str = "all awards", *, top: int = 5
+) -> Concentration:
+    """How concentrated are the winners over a set of awards?
+
+    Each award is attributed to its lead winner, spelling variants are folded
+    (so "ACME İNŞAAT" and "Acme Insaat Ltd." are one firm), and the result
+    reports the Herfindahl-Hirschman Index over win counts plus the leading
+    firms. Where single-bid share measures competition *within* one tender, this
+    measures it *across* tenders: are the same few firms winning everything?
+
+    HHI is the sum of squared win shares, in [0, 1]: ~1 means one firm takes
+    almost everything, 1/n means n firms share evenly. As a rough guide — the US
+    DOJ/FTC thresholds rescaled to 0-1 — below 0.15 is unconcentrated, 0.15-0.25
+    moderate, above 0.25 highly concentrated. It is a reason to look closer, not
+    a verdict: a small authority with few tenders is concentrated by arithmetic,
+    which is exactly why the coverage travels with the number."""
+    considered = 0
+    wins: dict[str, int] = {}
+    value: dict[str, float] = {}
+    names: dict[str, list[str]] = {}
+    for a in awards:
+        if a.cancelled:
+            continue
+        considered += 1
+        lead = _lead_winner(a)
+        key = normalize_company(lead) if lead else ""
+        if not key:
+            continue
+        wins[key] = wins.get(key, 0) + 1
+        if a.contract_try is not None:
+            value[key] = value.get(key, 0.0) + a.contract_try
+        names.setdefault(key, []).append(lead)  # type: ignore[arg-type]
+
+    used = sum(wins.values())
+    coverage = Coverage(considered=considered, used=used)
+    if used == 0:
+        return Concentration(label=label, coverage=coverage, distinct_firms=0)
+
+    hhi = round(sum((n / used) ** 2 for n in wins.values()), 4)
+    shares = [
+        FirmShare(
+            key=k,
+            name=display_name(names[k]),
+            wins=n,
+            contract_try=value.get(k, 0.0),
+            win_share=n / used,
+        )
+        for k, n in wins.items()
+    ]
+    shares.sort(key=lambda s: (-s.wins, -s.contract_try, s.key))
+    return Concentration(
+        label=label,
+        coverage=coverage,
+        distinct_firms=len(wins),
+        hhi=hhi,
+        top=shares[:top],
+    )
+
+
+def slice_awards(
+    awards: Sequence[Award], *, authority: str | None = None, province: str | None = None
+) -> tuple[list[Award], str]:
+    """Narrow a dataset by authority/province (case-insensitive substring) and
+    return the subset together with a label describing the slice. Shared by the
+    CLI and the MCP server so concentration means the same thing in both."""
+    subset = list(awards)
+    parts: list[str] = []
+    if authority:
+        needle = authority.casefold()
+        subset = [a for a in subset if a.authority and needle in a.authority.casefold()]
+        parts.append(f"authority ~ {authority!r}")
+    if province:
+        needle = province.casefold()
+        subset = [a for a in subset if a.province and needle in a.province.casefold()]
+        parts.append(f"province ~ {province!r}")
+    return subset, "; ".join(parts) if parts else "all awards"
+
+
 def by_group(
     awards: Iterable[Award], key: str, *, min_awards: int = 1
 ) -> list[DiscountStats]:

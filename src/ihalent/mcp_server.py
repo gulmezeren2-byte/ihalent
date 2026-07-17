@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ihalent.analytics import by_group, firm_profile, overview
+from ihalent.analytics import by_group, concentration, firm_profile, overview, slice_awards
 from ihalent.ingest import ingest_bundle
 from ihalent.parse import NotAResultNotice, parse_result_notice
 from ihalent.store import load_awards
@@ -58,6 +58,21 @@ def tool_discounts(by: str = "authority", awards_path: str | None = None) -> dic
     return {"group_by": by, "groups": [g.to_dict() for g in groups]}
 
 
+def tool_concentration(
+    authority: str | None = None,
+    province: str | None = None,
+    top: int = 5,
+    awards_path: str | None = None,
+) -> dict[str, Any]:
+    """Winner concentration (HHI) over the dataset, or a slice of it by authority
+    or province. Where single-bid share measures competition within a tender,
+    this measures it across tenders: are the same few firms winning everything?
+    Returns the HHI (0..1 over win counts), the leading firms, and the coverage."""
+    awards = load_awards(_resolve(awards_path))
+    subset, label = slice_awards(awards, authority=authority, province=province)
+    return concentration(subset, label=label, top=top).to_dict()
+
+
 def tool_parse_notice(markdown: str) -> dict[str, Any]:
     """Parse a single result-notice (Sonuç İlanı) markdown into a structured award."""
     try:
@@ -82,7 +97,14 @@ def tool_ingest_bundle(bundle: Any, awards_path: str | None = None) -> dict[str,
     return {"written": written, "new_in_bundle": len(awards), "dataset": str(path)}
 
 
-TOOLS = [tool_overview, tool_firm, tool_discounts, tool_parse_notice, tool_ingest_bundle]
+TOOLS = [
+    tool_overview,
+    tool_firm,
+    tool_discounts,
+    tool_concentration,
+    tool_parse_notice,
+    tool_ingest_bundle,
+]
 
 
 # -- MCP wrapper (needs the `mcp` extra) --------------------------------------

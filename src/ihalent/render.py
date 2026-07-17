@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ihalent.analytics import (
+    Concentration,
     Coverage,
     DiscountStats,
     FirmProfile,
@@ -80,6 +81,41 @@ def render_firm(profile: FirmProfile, console: Console) -> None:
         console.print("  top awarding authorities:")
         for name, n in sorted(profile.authorities.items(), key=lambda kv: -kv[1])[:5]:
             console.print(f"    {n:>3}x  {name}")
+
+
+def _hhi_label(hhi: float) -> str:
+    if hhi < 0.15:
+        return "unconcentrated"
+    if hhi < 0.25:
+        return "moderately concentrated"
+    return "highly concentrated"
+
+
+def render_concentration(conc: Concentration, console: Console) -> None:
+    console.print(f"\n[bold]Winner concentration — {conc.label}[/bold]")
+    if conc.hhi is None:
+        console.print(
+            f"  [yellow]No attributable winners[/] "
+            f"({_coverage_note(conc.coverage, 'awards')})."
+        )
+        return
+    tone = "green" if conc.hhi < 0.15 else "yellow"
+    console.print(
+        f"  {conc.distinct_firms} distinct firms   "
+        f"HHI {conc.hhi:.3f} ([{tone}]{_hhi_label(conc.hhi)}[/])"
+    )
+    table = Table(title="Leading firms", title_justify="left")
+    table.add_column("firm", overflow="fold")
+    table.add_column("wins", justify="right")
+    table.add_column("share", justify="right")
+    table.add_column("contract TL", justify="right")
+    for f in conc.top:
+        table.add_row(f.name, str(f.wins), f"{f.win_share:.1%}", fmt_try(f.contract_try))
+    console.print(table)
+    console.print(
+        f"[dim]{_coverage_note(conc.coverage, 'awards')}; HHI over win counts, "
+        f"each award attributed to its lead winner.[/dim]"
+    )
 
 
 def render_overview(ov: Overview, console: Console) -> None:
