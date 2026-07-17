@@ -41,6 +41,11 @@ dependencies = [
     "typer>=0.12",
 ]
 
+[project.optional-dependencies]
+# The MCP server is an extra so the parse+analytics core and CLI stay
+# dependency-light for pipelines that never touch an agent runtime.
+mcp = ["mcp>=1.2"]
+
 [project.urls]
 Homepage = "https://github.com/gulmezeren2-byte/ihalent"
 Repository = "https://github.com/gulmezeren2-byte/ihalent"
@@ -49,6 +54,7 @@ Changelog = "https://github.com/gulmezeren2-byte/ihalent/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ihalent = "ihalent.cli:main"
+ihalent-mcp = "ihalent.mcp_server:main"
 
 [dependency-groups]
 dev = [
@@ -79,6 +85,11 @@ strict = false
 warn_unused_ignores = true
 disallow_untyped_defs = true
 no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# mcp is an optional extra; the server module guards its import at runtime.
+module = ["mcp.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -14,6 +14,8 @@ First public release.
   dropped for missing data; discounts are never computed from a missing estimate.
 - `ingest` from ihale-mcp / EKAP output (pure function, no network), plus `overview`, `firm`,
   `discounts` and `parse` commands, each with a `--json` form.
+- Optional MCP server (`pip install 'ihalent[mcp]'`, `ihalent-mcp`) exposing the analytics as
+  agent tools over a dataset from `IHALENT_AWARDS`.
 - Worked example built from four real December-2025 awards across four authority types,
   including a negative-discount emergency-procurement case and the code that structures them.
 - 44 tests over the exact JSON shapes EKAP and ihale-mcp emit.

@@ -135,9 +135,20 @@ ihalent overview examples/sample-awards.jsonl
 The result notice is unstructured text; the interesting questions are aggregate. That is an
 awkward fit for an agent working notice-by-notice, and a natural fit for a tool: `--json`
 output with stable fields, an exit code that means something, and a firm-name match that
-folds spelling variants so an agent doesn't have to. A native MCP server is on the roadmap;
-today, the CLI is already agent-friendly and the Python API (`ihalent.ingest_bundle`,
-`ihalent.analytics.firm_profile`) is three calls deep.
+folds spelling variants so an agent doesn't have to.
+
+There is a native **MCP server** (`pip install 'ihalent[mcp]'`) that exposes the analytics
+as tools — `overview`, `firm`, `discounts`, `parse_notice`, `ingest_bundle` — over a dataset
+you point it at:
+
+```
+IHALENT_AWARDS=awards.jsonl ihalent-mcp
+```
+
+Pair it with ihale-mcp and an agent can collect notices and reason across them in one
+session: ihale-mcp fetches, ihalent structures and aggregates. The Python API
+(`ihalent.ingest_bundle`, `ihalent.analytics.firm_profile`) is three calls deep if you'd
+rather script it.
 
 ## Scope, honestly
 
