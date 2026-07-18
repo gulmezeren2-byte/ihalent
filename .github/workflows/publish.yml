@@ -1,27 +1,26 @@
-name: Publish to PyPI
+name: Release
 
-# Manual trigger only, for now. The PyPI release is published with a token;
-# once ihalent is configured as a PyPI Trusted Publisher (Project → Publishing →
-# GitHub, workflow "publish.yml"), switch this back to `on: release` and every
-# release will ship itself with no token.
+# Publishes to PyPI when a version tag (e.g. v0.4.0) is pushed, using PyPI
+# Trusted Publishing (OIDC) — no API token is stored anywhere. The trusted
+# publisher is configured at
+# https://pypi.org/manage/project/ihalent/settings/publishing/
+# (owner: gulmezeren2-byte, repo: ihalent, workflow: publish.yml).
+
 on:
-  workflow_dispatch:
+  push:
+    tags: ["v*"]
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
-      id-token: write  # required for trusted publishing
+      id-token: write # required for OIDC trusted publishing
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-
+          enable-cache: true
       - name: Build
         run: uv build
-
-      - name: Publish
-        run: uv publish
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
