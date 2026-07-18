@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.gulmezeren2-byte/ihalent",
   "title": "ihalent",
-  "description": "Turkish public-tender award intelligence from EKAP result notices: firm histories, discount distributions, competition metrics. Needs the [mcp] extra: pip install 'ihalent[mcp]'.",
+  "description": "Turkish public-tender (EKAP) award intelligence: firm histories, discounts, competition, red flags",
   "repository": {
     "url": "https://github.com/gulmezeren2-byte/ihalent",
     "source": "github"
