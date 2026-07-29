@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 — 2026-07-29
+
+- **Fixed a crash when output is piped on Windows.** A piped stdout gets the legacy
+  code page rather than UTF-8, and every report here is full of Turkish — firm names
+  like `ÖZKAN İNŞAAT LTD. ŞTİ.`, labels like `kırım` — which raised
+  `UnicodeEncodeError` and took the command down. So `ihalent overview … | tee`, and
+  any CI step capturing the log, failed on ordinary data. Output streams are now asked
+  for UTF-8, and the guard never fails if a stream won't take it.
+
 ## 0.3.0 — 2026-07-17
 
 - **Procurement red flags (`ihalent flags`)**: per-award risk signals used in transparency

@@ -57,6 +57,23 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _use_utf8_output() -> None:
+    """Make stdout/stderr able to carry the text this tool exists to print.
+
+    Every report is full of Turkish — firm names like `ÖZKAN İNŞAAT LTD. ŞTİ.`,
+    labels like `kırım` — and on Windows a *piped* stdout gets the legacy code page,
+    where those characters raise UnicodeEncodeError and take the whole command down.
+    `ihalent overview … | tee` must not crash, so ask for UTF-8 and never fail if the
+    stream won't take it.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        with contextlib.suppress(OSError, ValueError):
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 @app.callback()
 def _root(
     version: bool = typer.Option(
@@ -65,6 +82,7 @@ def _root(
     ),
 ) -> None:
     """ihalent — who won, for how much, at what discount, against how many bidders."""
+    _use_utf8_output()
 
 
 def _load(path: Path) -> list:
