@@ -127,15 +127,47 @@ TOOLS = [
 # -- MCP wrapper (needs the `mcp` extra) --------------------------------------
 
 
-def build_server() -> Any:
+def server_class() -> Any:
+    """The high-level server class, whichever major of the SDK is installed.
+
+    The MCP Python SDK renamed it between majors: `mcp.server.fastmcp.FastMCP` in 1.x,
+    `mcp.server.MCPServer` in 2.x, with the old module removed outright. The two are
+    drop-in for what we use of them, so both are accepted rather than pinning users to
+    one SDK generation.
+
+    The failure is also reported honestly. Telling someone to install the extra when
+    they already installed it — the old behaviour once 2.x shipped — sends them in a
+    circle; a missing package and an SDK that moved are different problems.
+    """
     try:
-        from mcp.server.fastmcp import FastMCP
-    except ImportError as exc:  # pragma: no cover - exercised only without the extra
+        from mcp.server import MCPServer  # mcp >= 2.0
+
+        return MCPServer
+    except ImportError:
+        pass
+    try:
+        from mcp.server.fastmcp import FastMCP  # mcp 1.x
+
+        return FastMCP
+    except ImportError:
+        pass
+
+    try:
+        import mcp
+    except ImportError as exc:
         raise SystemExit(
             "The MCP server needs the optional dependency: pip install 'ihalent[mcp]'"
         ) from exc
+    installed = getattr(mcp, "__version__", None) or "unknown version"
+    raise SystemExit(
+        f"the installed mcp package ({installed}) exposes neither mcp.server.MCPServer "
+        "(SDK 2.x) nor mcp.server.fastmcp.FastMCP (SDK 1.x), so the server cannot be "
+        "built. This is an SDK incompatibility, not a missing install."
+    )
 
-    server = FastMCP("ihalent")
+
+def build_server() -> Any:
+    server = server_class()("ihalent")
     for fn in TOOLS:
         server.tool()(fn)
     return server

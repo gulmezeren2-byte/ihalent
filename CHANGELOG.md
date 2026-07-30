@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.2 — 2026-07-30
+
+- **Fixed: the MCP server would not start with version 2 of the MCP SDK.** The SDK
+  renamed its high-level server class between majors — `mcp.server.fastmcp.FastMCP`
+  in 1.x, `mcp.server.MCPServer` in 2.x — and removed the old module outright, so a
+  fresh `pip install 'ihalent[mcp]'` resolved SDK 2.0.0 and the server died at import.
+  Both spellings are now accepted; they are drop-in for what is used of them, so
+  nobody is pinned to one SDK generation.
+- **And the error no longer sends you in a circle.** The old handler treated every
+  import failure as a missing optional dependency and said to install the extra —
+  which, once the SDK moved, was advice to repeat the step you had already done. A
+  package that isn't installed and an SDK that moved are different problems, and are
+  now reported as such.
+
+
 ## 0.3.1 — 2026-07-29
 
 - **Fixed a crash when output is piped on Windows.** A piped stdout gets the legacy

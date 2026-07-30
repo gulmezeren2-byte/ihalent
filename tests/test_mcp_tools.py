@@ -3,11 +3,13 @@ so they run without the `mcp` extra installed."""
 
 from __future__ import annotations
 
+import builtins
 from pathlib import Path
 
 import pytest
 
 from ihalent.mcp_server import (
+    server_class,
     tool_concentration,
     tool_discounts,
     tool_firm,
@@ -118,3 +120,36 @@ def test_ingest_appends_to_dataset(dataset_path: str) -> None:
 def test_no_dataset_is_a_clear_error() -> None:
     with pytest.raises(ValueError, match="No awards dataset"):
         tool_overview(None)
+
+
+# --------------------------------------------------------------------------- #
+# The SDK renamed its high-level server between majors — `FastMCP` in 1.x,
+# `MCPServer` in 2.x — and deleted the old module outright, which broke every
+# published server built on it. Both spellings are accepted, and the failure now
+# says which problem it actually is.
+# --------------------------------------------------------------------------- #
+def test_the_server_class_resolves_against_whichever_sdk_is_installed() -> None:
+    pytest.importorskip("mcp")
+    resolved = server_class()
+    assert resolved.__name__ in {"MCPServer", "FastMCP"}
+    assert hasattr(resolved, "tool")
+
+
+def test_an_sdk_exposing_neither_api_is_not_called_a_missing_install(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("mcp")
+    real_import = builtins.__import__
+
+    def without_a_server_api(name, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if name in {"mcp.server", "mcp.server.fastmcp"}:
+            raise ImportError(f"No module named {name!r}")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_a_server_api)
+    with pytest.raises(SystemExit) as caught:
+        server_class()
+    message = str(caught.value)
+    # telling someone to install the extra they already installed is a dead end
+    assert "pip install" not in message
+    assert "incompatibility" in message
