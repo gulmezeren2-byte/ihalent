@@ -186,6 +186,12 @@ tests — 44 of them, built on the exact JSON shapes EKAP and ihale-mcp emit, in
 result notice with a negative discount and a cancelled tender. They don't care who typed
 them.
 
+## Related
+
+- **[acikpoz](https://github.com/gulmezeren2-byte/acikpoz)** — the other half of the Turkish public-procurement picture. `ihalent` reads the tender result notices that say who won and at what discount; `acikpoz` reads the unit-price (birim fiyat) catalogs that say what the work *should* have cost. Same discipline: every figure traceable to its source, nothing invented.
+
+More tools by [Eren Gülmez](https://github.com/gulmezeren2-byte?tab=repositories).
+
 ## License
 
 [MIT](LICENSE) — Mehmet Eren Gülmez
