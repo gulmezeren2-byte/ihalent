@@ -1,4 +1,4 @@
-# Example: nine real December-2025 awards
+# Example: nine real awards from the December-2025 / January-2026 window
 
 Two real sources, both collected from EKAP via ihale-mcp, shipped as-is (we ship the
 collected data, not a redistributed dataset). `build_sample.py` turns them into

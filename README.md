@@ -3,6 +3,7 @@
 **Turkish public-tender award intelligence: who won, for how much, at what discount, against how many bidders.**
 
 [![CI](https://github.com/gulmezeren2-byte/ihalent/actions/workflows/ci.yml/badge.svg)](https://github.com/gulmezeren2-byte/ihalent/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/ihalent)](https://pypi.org/project/ihalent/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -18,10 +19,10 @@ authority actually award." ihalent turns those notices into structured records a
 exactly those questions — firm histories, discount (kırım) distributions, and competition
 metrics — with every number traceable back to the notice it came from.
 
-![ihalent overview, winner concentration and procurement red flags over nine real December-2025 awards](docs/demo.svg)
+![ihalent overview, winner concentration and procurement red flags over nine real awards from the December-2025 / January-2026 window](docs/demo.svg)
 
-That is real output over nine real December-2025 construction awards (in
-[`examples/`](examples/)). The `-2.96%` at the top of the range is not a bug: Istanbul
+That is real output over nine real construction awards from the December-2025 / January-2026 window (in
+[`examples/`](examples/)). The `-2.96%` at the bottom of the range is not a bug: Istanbul
 University awarded a 615-million-lira campus job at **2.96% above** its own estimate,
 through an emergency "pazarlık" procedure — a contract signed over the public estimate,
 which is precisely the kind of thing that should be easy to see and currently is not.
@@ -46,11 +47,16 @@ and does the analytics that don't exist yet.
 **A firm's history** — every award across the dataset, folded across spelling variants:
 
 ```
-$ ihalent firm awards.jsonl "ÖZDEN YEL"
-
+$ ihalent firm examples/sample-awards.jsonl "ÖZDEN YEL"
 ÖZDEN YEL
   wins: 1   joint ventures: 1   total contract value: 19.709.997,40 TL
-  Discount (kırım): mean 33.87%
+Discount (kırım) — ÖZDEN YEL         
+┌────────┬────────┬────────┬────────┐
+│ mean   │ median │ min    │ max    │
+├────────┼────────┼────────┼────────┤
+│ 33.87% │ 33.87% │ 33.87% │ 33.87% │
+└────────┴────────┴────────┴────────┘
+based on all 1 awards.
   top awarding authorities:
       1x  DSİ 14. Bölge Müdürlüğü
 ```
@@ -58,13 +64,22 @@ $ ihalent firm awards.jsonl "ÖZDEN YEL"
 **Where the discounts are** — grouped and sorted, highest first:
 
 ```
-$ ihalent discounts awards.jsonl --by authority
-
-Mean discount by authority
-  DSİ 14. Bölge Müdürlüğü            33.87%   1/1
-  Esenler Belediyesi                21.99%   1/1
-  Ağrı İl Özel İdaresi              19.99%   1/1
-  İstanbul Üniversitesi-Cerrahpaşa  -2.96%   1/1
+$ ihalent discounts examples/sample-awards.jsonl --by authority
+Mean discount by authority                                     
+┌──────────────────────────────────┬────────┬────────┬────────┐
+│ authority                        │   mean │ median │ awards │
+├──────────────────────────────────┼────────┼────────┼────────┤
+│ DSİ 14. Bölge Müdürlüğü          │ 33.87% │ 33.87% │    1/1 │
+│ Ziraat Bankası Genel Müdürlüğü   │ 31.41% │ 31.41% │    1/1 │
+│ İstanbul YİKOB                   │ 26.98% │ 26.98% │    1/1 │
+│ İSKİ Genel Müdürlüğü             │ 26.66% │ 26.66% │    1/1 │
+│ İTÜ Rektörlüğü                   │ 22.68% │ 22.68% │    1/1 │
+│ Esenler Belediyesi               │ 21.99% │ 21.99% │    1/1 │
+│ Ağrı İl Özel İdaresi             │ 19.99% │ 19.99% │    1/1 │
+│ Kağıthane Belediyesi             │ 17.41% │ 17.41% │    1/1 │
+│ İstanbul Üniversitesi-Cerrahpaşa │ -2.96% │ -2.96% │    1/1 │
+└──────────────────────────────────┴────────┴────────┴────────┘
+awards column: used / considered (excluded lack an estimate).
 ```
 
 **Competition** — how many valid bids show up, and how often exactly one does (a single-bid
@@ -182,7 +197,7 @@ in their public commercial capacity, not private individuals.
 
 I designed the model and the analytics and I review every line; I use AI agents (Claude
 Code) heavily for implementation speed, and the commit trailers say so. The contract is the
-tests — 44 of them, built on the exact JSON shapes EKAP and ihale-mcp emit, including a
+tests — 80 of them, built on the exact JSON shapes EKAP and ihale-mcp emit, including a
 result notice with a negative discount and a cancelled tender. They don't care who typed
 them.
 
