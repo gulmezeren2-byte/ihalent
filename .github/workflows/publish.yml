@@ -8,7 +8,10 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    # Only a full version tag publishes. A moving tag like `v1` — which this repo
+    # repoints at each release for GitHub Action users — must not fire a second
+    # publish run for a version already on PyPI.
+    tags: ["v*.*.*"]
 
 jobs:
   publish:
