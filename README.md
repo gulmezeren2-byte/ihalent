@@ -129,6 +129,32 @@ ihalent discounts awards.jsonl --by authority --min 5
 says how many notices it read, rejected, or could not find; it exits 1 if those don't
 add up. A notice whose labels and values don't pair up is rejected, never guessed.
 
+**Every working day, by itself.** `ihalent daily FOLDER` (0.5.0 and later; it needs the
+`bulletin` extra) does both steps for every tender type: it fetches what the folder is
+missing from the last seven days, so a week the computer was off is filled in, and
+rebuilds `FOLDER/awards.jsonl`. Each file is read once and its read is kept beside it in
+`.ihalent-reads/`, so the run stays quick as the folder grows. Let the computer's
+scheduler run it after the day's bulletin is out:
+
+```powershell
+# Windows (PowerShell): every weekday at 19:00, or as soon as the computer is on after that
+$ihalent = (Get-Command ihalent).Source
+$run = New-ScheduledTaskAction -Execute $ihalent -Argument "daily `"$HOME\ekap`""
+$when = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At 19:00
+$opts = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+Register-ScheduledTask -TaskName ihalent-daily -Action $run -Trigger $when -Settings $opts
+```
+
+```
+# macOS / Linux: add this line with `crontab -e` (`command -v ihalent` prints the full path)
+0 19 * * 1-5  /full/path/to/ihalent daily "$HOME/ekap"
+```
+
+A public holiday just shows as a day with no bulletin; a whole week without one exits 1,
+because that is also how a changed page would look. If the page ever asks for human
+verification or refuses, `daily` stops and leaves `ihalent-stopped.txt` in the folder;
+later runs don't contact the page until you delete that file.
+
 **Lots.** A tender awarded in parts (kısmi teklif) gets one notice per lot, and the lots
 come out on different days, each printing the tender-wide estimate. ihalent merges them
 by İKN and sums the contracts, but gives such a tender **no discount**
@@ -174,6 +200,7 @@ ihalent overview examples/sample-awards.jsonl
 | `ihalent flags AWARDS` | per-award red flags: single bid, near-estimate price, no estimate, high drop-off |
 | `ihalent fetch-bulletin --out DIR` | download Kamu İhale Bülteni files from EKAP's public bulletin page |
 | `ihalent ingest-bulletin DIR` | bulletin result notices → awards JSONL, checked against the table of contents |
+| `ihalent daily DIR` | the last week's bulletins of every type → DIR, then DIR/awards.jsonl; for a scheduler |
 | `ihalent parse NOTICE.md` | one result notice → structured JSON |
 | `ihalent ingest BUNDLE.json` | collected ihale-mcp/EKAP output → awards JSONL |
 
@@ -203,11 +230,12 @@ if you'd rather script it.
 ## Scope, honestly
 
 - **One narrow network step, and it never forces its way in.** Everything except
-  `fetch-bulletin` is a pure function of the files you give it. `fetch-bulletin` asks one
+  `fetch-bulletin` and `daily` is a pure function of the files you give it. They ask one
   public page for the files KİK publishes there for anyone: one file per working day and
   tender type, at least two seconds apart, never twice. If that page ever asks for human
-  verification or refuses a request, it stops and says so — it does not retry, and
-  ihalent will not ship a way around such a check.
+  verification or refuses a request, they stop and say so — they do not retry (`daily`
+  leaves a file that keeps later runs from trying), and ihalent will not ship a way
+  around such a check.
 - **Company-name folding is conservative on purpose.** It merges legal-form suffixes and
   Turkish spelling variants, and it would rather show two rows for one firm than one row for
   two — so `firm` reports how many distinct spellings a query matched, and warns you if that
@@ -231,14 +259,15 @@ Public-tender results are public information, published by the state for public 
 ihalent structures what EKAP already discloses. Most winners are companies acting in their
 public commercial capacity — but some are sole traders, whose name is a private person's
 name and personal data under Turkish law (KVKK). So ihalent never keeps the winner's
-address, ships no collected bulletins or awards, and leaves publishing what you collect
-to you and the law, not to a default.
+address and ships no collected bulletins or awards. It downloads the bulletins to your
+computer and reads them there; it publishes nothing. What you then keep, use or share,
+sole traders' names included, is your responsibility under the law, not this project's.
 
 ## How this project is built
 
 I designed the model and the analytics and I review every line; I use AI agents (Claude
 Code) heavily for implementation speed, and the commit trailers say so. The contract is the
-tests — 125 of them, built on the exact JSON shapes EKAP and ihale-mcp emit and on the
+tests — 132 of them, built on the exact JSON shapes EKAP and ihale-mcp emit and on the
 page geometry measured in a real bulletin, including a result notice with a negative
 discount, a cancelled tender, a value that runs onto the next page and a tender awarded in
 lots. They don't care who typed them.

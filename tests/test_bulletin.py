@@ -501,6 +501,44 @@ def test_ingest_bulletin_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert report["awards"] == 2
 
 
+def test_a_bulletin_is_read_once_and_again_only_when_something_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A day's goods bulletin takes over a minute to read, and a dataset is rebuilt
+    # from every file collected so far: without the saved read a daily run would
+    # grow slower every day.
+    page = toc("2026/1000016", "2026/1000017")
+    page.notice(1, "2026/1000016", "İŞ", "İDARE", standard_rows("2026/1000016"))
+    shifted = _replace(standard_rows("2026/1000017"), "b) Bedeli",
+                       ("field", "b) Bedeli", "Uygulanmamıştır"))
+    page.notice(2, "2026/1000017", "İŞ", "İDARE", shifted)  # rejected
+    calls: list[str] = []
+
+    def fake(path: Path) -> list[BulletinRead]:
+        calls.append(Path(path).name)
+        return [read_words(page.words, source="A_SONUC.pdf")]
+
+    monkeypatch.setattr(bulletin, "read_bulletin", fake)
+    f = tmp_path / "a.zip"
+    f.write_bytes(b"PK one")
+    first = bulletin.read_bulletin_saved(f)
+    assert first[0].notices and first[0].rejected  # both kinds survive the save
+    assert bulletin.read_bulletin_saved(f) == first
+    assert calls == ["a.zip"]
+
+    f.write_bytes(b"PK two")  # a different file under the same name
+    assert bulletin.read_bulletin_saved(f) == first
+    assert len(calls) == 2
+
+    monkeypatch.setattr(bulletin, "_reader_key", lambda: "a newer reader")
+    bulletin.read_bulletin_saved(f)
+    assert len(calls) == 3
+
+    (tmp_path / bulletin.SAVED_READS_DIR / "a.zip.json").write_text("{cut", encoding="utf-8")
+    assert bulletin.read_bulletin_saved(f) == first  # unreadable: read again
+    assert len(calls) == 4
+
+
 def test_cli_missing_extra_names_the_right_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -6,6 +6,7 @@
     ihalent parse     notice.md
     ihalent fetch-bulletin --out bulletins
     ihalent ingest-bulletin bulletins -o awards.jsonl
+    ihalent daily ekap          # both, for every tender type; run it from a scheduler
 
 The dataset commands read a JSONL file of awards (`ihalent ingest-bulletin`,
 `ihalent ingest` and `ihalent parse` produce one). Every command has a --json form
@@ -345,24 +346,33 @@ def ingest_bulletin_cmd(
 
     Give it every bulletin collected so far, not one day: a tender's lots are
     published on different days, and the file is rebuilt from all of them.
-    Each file is checked against its own table of contents; the command exits 1
-    if any notice could not be read or the counts disagree."""
+    Each file is read once; the read is kept in a .ihalent-reads folder beside
+    it and reused. Each file is checked against its own table of contents; the
+    command exits 1 if any notice could not be read or the counts disagree."""
+    files = _bulletin_files(paths)
+    if not files:
+        _err.print("[yellow]No bulletin files found.[/yellow]")
+        raise typer.Exit(1)
+    if not _read_bulletins(files, out, as_json=as_json):
+        raise typer.Exit(1)
+
+
+def _read_bulletins(files: list[Path], out: Path, *, as_json: bool, quiet: bool = False) -> bool:
+    """Read the files into ``out``; False if any file did not read completely.
+
+    ``quiet`` prints only the files that need a look, for a run nobody watches."""
     from ihalent.bulletin import (
         BulletinError,
         BulletinRead,
         MissingExtra,
         awards_from_reads,
-        read_bulletin,
+        read_bulletin_saved,
     )
 
-    files = _bulletin_files(paths)
-    if not files:
-        _err.print("[yellow]No bulletin files found.[/yellow]")
-        raise typer.Exit(1)
     reads: list[BulletinRead] = []
     for f in files:
         try:
-            got = read_bulletin(f)
+            got = read_bulletin_saved(f)
         except MissingExtra as exc:  # escaped: "[bulletin]" is not markup
             _err.print(f"[bold red]error:[/bold red] {escape(str(exc))}")
             raise typer.Exit(2) from exc
@@ -380,7 +390,7 @@ def ingest_bulletin_cmd(
             ensure_ascii=True, indent=2,
         ))
     else:
-        for r in reads:
+        for r in incomplete if quiet else reads:
             mark = "ok" if r.complete else "[bold red]CHECK[/bold red]"
             _console.print(
                 f"{mark}  {r.source}: {len(r.notices)} notice(s) read, "
@@ -395,8 +405,7 @@ def ingest_bulletin_cmd(
             f"wrote {out} — {n} tender(s)"
             + (f"; {lots} awarded in lots, so no discount for them" if lots else "")
         )
-    if incomplete:
-        raise typer.Exit(1)
+    return not incomplete
 
 
 @app.command("fetch-bulletin")
@@ -444,6 +453,80 @@ def fetch_bulletin_cmd(
         raise typer.Exit(4)
     if report.unavailable:
         raise typer.Exit(1)
+
+
+STOP_FILE = "ihalent-stopped.txt"
+
+
+@app.command("daily")
+def daily_cmd(
+    folder: Path = typer.Argument(..., help="Folder for the bulletins and awards.jsonl."),
+    days: int = typer.Option(7, "--days", min=1, help="How many days back to fill in."),
+) -> None:
+    """Fetch the last days' bulletins of every tender type, then rebuild awards.jsonl.
+
+    Made to be run once every working day by a scheduler. It fetches what FOLDER
+    is missing from the last --days days (7 by default, so a week the computer
+    was off is filled in), then reads every bulletin in FOLDER into
+    FOLDER/awards.jsonl, each file only once. A day with no bulletin, such as a
+    public holiday, is listed and is not an error; a whole window without one is
+    (exit 1), since that is how a changed page would look.
+
+    If the page asks for human verification or refuses, it stops and leaves
+    ihalent-stopped.txt in FOLDER; later runs do not contact the page until that
+    file is deleted (exit 3). Exit 4 on a network or server error, which the next
+    run tries again; exit 1 if a file did not read completely."""
+    from datetime import date as _date
+    from datetime import datetime, timedelta
+
+    from ihalent import fetch
+
+    folder.mkdir(parents=True, exist_ok=True)
+    stop = folder / STOP_FILE
+    code = 0
+    if stop.is_file():
+        _err.print(
+            f"[bold red]stopped:[/bold red] {escape(str(stop))} is there, so the bulletin "
+            "page was not contacted: an earlier run met a verification screen or a "
+            "refusal. Delete that file to try again."
+        )
+        code = 3
+    else:
+        end = _date.today()
+        start = end - timedelta(days=days - 1)
+        report = fetch.fetch_range(start, end, list(fetch.TYPE_CODE), folder)
+        got = [r for r in report.results if r.downloaded]
+        for r in got:
+            _console.print(f"got   {r.path}")
+        for d, why in report.unavailable:
+            _console.print(f"none  {d.isoformat()}: {why}")
+        _console.print(f"{len(report.results) - len(got)} file(s) were already there")
+        if report.blocked:
+            stop.write_text(
+                f"ihalent stopped on {datetime.now():%Y-%m-%d %H:%M}: {report.blocked}\n"
+                "It will not contact EKAP's bulletin page from this folder again until "
+                "this file is deleted.\n",
+                encoding="utf-8",
+            )
+            _err.print(
+                f"[bold red]stopped:[/bold red] {escape(report.blocked)} "
+                f"(see {escape(str(stop))})"
+            )
+            code = 3
+        elif report.failed:
+            _err.print(f"[bold red]failed:[/bold red] {escape(report.failed)}")
+            code = 4
+        elif not report.results and any(fetch.weekdays(start, end)):
+            _err.print(
+                f"[bold red]nothing:[/bold red] no bulletin of any type in the last {days} "
+                "day(s). A long holiday, or the bulletin page has changed: try "
+                "`ihalent fetch-bulletin` by hand."
+            )
+            code = 1
+    files = _bulletin_files([folder])
+    if files and not _read_bulletins(files, folder / "awards.jsonl", as_json=False, quiet=True):
+        code = code or 1
+    raise typer.Exit(code)
 
 
 def main() -> None:

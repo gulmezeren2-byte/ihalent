@@ -26,12 +26,15 @@ service and consultancy bulletins use the same form but were not checked.
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import io
+import json
 import re
 import zipfile
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -221,6 +224,88 @@ def read_bulletin(path: str | Path) -> list[BulletinRead]:
         read_words(words_from_pdf(io.BytesIO(data)), source=name)
         for name, data in result_pdfs(path)
     ]
+
+
+# -- Saved reads ----------------------------------------------------------------
+
+SAVED_READS_DIR = ".ihalent-reads"
+
+
+def _reader_key() -> str:
+    """What a saved read depends on besides the file: the release, the reading
+    code (this module and the label folding it borrows) and pdfplumber."""
+    from ihalent import __version__, parse
+
+    code = __version__.encode()
+    for module_file in (__file__, parse.__file__ or ""):
+        with contextlib.suppress(OSError):  # no source beside the install
+            code += b"\0" + Path(module_file).read_bytes()
+    try:
+        from importlib.metadata import version
+
+        plumber = version("pdfplumber")
+    except Exception:  # pragma: no cover - not installed: nothing can be read anyway
+        plumber = "-"
+    return hashlib.sha256(code + b"\0" + plumber.encode()).hexdigest()
+
+
+def _read_to_dict(r: BulletinRead) -> dict[str, Any]:
+    return {
+        "source": r.source,
+        "notices": [
+            {"ikn": n.ikn, "section": n.section, "page": n.page, "title": n.title,
+             "authority": n.authority, "fields": [list(f) for f in n.fields]}
+            for n in r.notices
+        ],
+        "rejected": [asdict(x) for x in r.rejected],
+        "toc_ikns": r.toc_ikns,
+    }
+
+
+def _read_from_dict(d: dict[str, Any]) -> BulletinRead:
+    return BulletinRead(
+        source=d["source"],
+        notices=[
+            BulletinNotice(
+                n["ikn"], n["section"], n["page"], n["title"], n["authority"],
+                [(f[0], f[1], f[2]) for f in n["fields"]],
+            )
+            for n in d["notices"]
+        ],
+        rejected=[Rejection(**x) for x in d["rejected"]],
+        toc_ikns=list(d["toc_ikns"]),
+    )
+
+
+def read_bulletin_saved(path: str | Path) -> list[BulletinRead]:
+    """``read_bulletin``, done once per file.
+
+    A day's goods bulletin takes over a minute to read, and a dataset is rebuilt
+    from every bulletin collected so far, so a daily run would grow slower every
+    day. The read is saved beside the file, in ``.ihalent-reads/``, and reused
+    while the file, this module and pdfplumber are unchanged; a saved read that
+    is missing, stale or unreadable is simply read again. It holds what the
+    bulletin holds, winners' names included, and never leaves that folder."""
+    p = Path(path)
+    key = hashlib.sha256(p.read_bytes()).hexdigest() + ":" + _reader_key()
+    saved = p.parent / SAVED_READS_DIR / f"{p.name}.json"
+    try:
+        doc = json.loads(saved.read_text(encoding="utf-8"))
+        if doc["key"] == key:
+            return [_read_from_dict(d) for d in doc["reads"]]
+    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
+        pass  # no usable saved read: read the file
+    reads = read_bulletin(p)
+    with contextlib.suppress(OSError):  # a folder we cannot write to still reads
+        saved.parent.mkdir(exist_ok=True)
+        part = saved.with_suffix(".part")
+        part.write_text(
+            json.dumps({"key": key, "reads": [_read_to_dict(r) for r in reads]},
+                       ensure_ascii=False),
+            encoding="utf-8",
+        )
+        part.replace(saved)
+    return reads
 
 
 # -- Layout -------------------------------------------------------------------
