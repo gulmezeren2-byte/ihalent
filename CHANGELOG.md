@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-11-14
 
 - **Every working day, by itself (`ihalent daily FOLDER`).** Fetches what the folder is
   missing of every tender type's bulletins from the last seven days (`--days`), then
