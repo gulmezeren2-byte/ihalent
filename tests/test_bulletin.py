@@ -231,6 +231,23 @@ def test_a_value_that_runs_onto_the_next_page() -> None:
     assert r.notices[0].value("2", "Süresi") == "90"
 
 
+def test_a_value_that_starts_at_the_foot_of_a_page() -> None:
+    # Goods bulletin of 13 November 2026: a long cell's first line is the last line
+    # of a page, and its label and ':' are printed on the next page with the rest.
+    rows = standard_rows("2026/1000022")
+    rows = _replace(rows, "b) Yapılacağı yer", ("field", "b) Yapılacağı yer",
+                                                 [f"{i}. Kısım Örnek Yeri" for i in range(1, 9)],
+                                                 "middle"))
+    page = toc("2026/1000022")
+    page.notice(1, "2026/1000022", "İŞ", "İDARE", rows)
+    cut = next(w.top for w in page.words if w.text == "2.") - 1.0  # only line 1 stays
+    r = read(page, page.paginate(limit=cut))
+    assert r.complete, r.to_dict()
+    place = r.notices[0].value("2", "Yapılacağı yer")
+    assert place.startswith("1. Kısım") and place.count("Kısım") == 8
+    assert r.notices[0].value("2", "Adı") == "Örnek Okul Onarımı"
+
+
 def test_the_winners_address_is_never_kept() -> None:
     page = toc("2026/1000006")
     page.notice(1, "2026/1000006", "İŞ", "İDARE", standard_rows("2026/1000006"))
@@ -377,6 +394,41 @@ def test_a_dash_is_not_accepted_as_a_contract_price() -> None:
     assert not read(page).notices
 
 
+def test_an_estimate_in_lira_beside_its_foreign_original() -> None:
+    rows = standard_rows("2026/1000023", estimate="196.199.505,60 TRY (3.664.000,00 EUR)",
+                         contract="150.000.000,00 TRY")
+    page = toc("2026/1000023")
+    page.notice(1, "2026/1000023", "İŞ", "İDARE", rows)
+    r = read(page)
+    assert r.complete, r.to_dict()
+    (a,) = awards_from_reads([r])
+    assert a.estimate_try == 196_199_505.60  # the lira figure, not the euro one
+
+
+@pytest.mark.parametrize("price", ["532.500,00 EUR", "3.750,00 USD"])
+def test_a_contract_in_another_currency_is_not_counted_as_lira(price: str) -> None:
+    # Nine goods notices of 12-13 November 2026 price the contract in EUR or USD
+    # against a lira estimate. No exchange rate is guessed: the lira price is empty.
+    rows = standard_rows("2026/1000024", contract=price)
+    page = toc("2026/1000024")
+    page.notice(1, "2026/1000024", "İŞ", "İDARE", rows)
+    r = read(page)
+    assert r.complete, r.to_dict()
+    (a,) = awards_from_reads([r])
+    assert a.contract_try is None
+    assert a.discount_pct is None
+    assert a.winner == "Örnek Yapı Limited Şirketi"
+    assert not a.cancelled
+
+
+def test_an_ikn_with_a_numbered_suffix_is_kept_as_printed() -> None:
+    page = toc("2026/1000025-4")
+    page.notice(1, "2026/1000025-4", "İŞ", "İDARE", standard_rows("2026/1000025-4"))
+    r = read(page)
+    assert r.complete, r.to_dict()
+    assert [n.ikn for n in r.notices] == ["2026/1000025-4"]
+
+
 def test_the_table_of_contents_catches_a_missing_notice() -> None:
     page = toc("2026/1000013", "2026/1000014")
     page.notice(1, "2026/1000013", "İŞ", "İDARE", standard_rows("2026/1000013"))
@@ -447,3 +499,20 @@ def test_ingest_bulletin_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     report = json.loads(res.output)
     assert [f["source"] for f in report["files"]] == ["A_SONUC.pdf", "B_SONUC.pdf"]
     assert report["awards"] == 2
+
+
+def test_cli_missing_extra_names_the_right_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The terminal reads "[bulletin]" as a style tag unless it is escaped, and the
+    # advice became `pip install "ihalent"`: the step the reader already took.
+    def fake(path: Path) -> list[BulletinRead]:
+        raise bulletin.MissingExtra(
+            'Reading bulletin PDFs needs the optional extra: pip install "ihalent[bulletin]"'
+        )
+
+    monkeypatch.setattr(bulletin, "read_bulletin", fake)
+    (tmp_path / "a.zip").write_bytes(b"PK")
+    res = CliRunner().invoke(app, ["ingest-bulletin", str(tmp_path / "a.zip")])
+    assert res.exit_code == 2
+    assert '"ihalent[bulletin]"' in res.output

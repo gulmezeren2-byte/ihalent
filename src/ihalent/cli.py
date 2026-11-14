@@ -21,6 +21,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 import ihalent as _ihalent
 from ihalent.analytics import (
@@ -362,11 +363,11 @@ def ingest_bulletin_cmd(
     for f in files:
         try:
             got = read_bulletin(f)
-        except MissingExtra as exc:
-            _err.print(f"[bold red]error:[/bold red] {exc}")
+        except MissingExtra as exc:  # escaped: "[bulletin]" is not markup
+            _err.print(f"[bold red]error:[/bold red] {escape(str(exc))}")
             raise typer.Exit(2) from exc
         except (BulletinError, OSError) as exc:
-            _err.print(f"[bold red]error:[/bold red] {exc}")
+            _err.print(f"[bold red]error:[/bold red] {escape(str(exc))}")
             raise typer.Exit(2) from exc
         # A ZIP and the PDF unpacked from it are one file: report it once.
         reads += [r for r in got if r.source not in {s.source for s in reads}]
@@ -436,10 +437,10 @@ def fetch_bulletin_cmd(
     for d, why in report.unavailable:
         _console.print(f"none  {d.isoformat()}: {why}")
     if report.blocked:
-        _err.print(f"[bold red]stopped:[/bold red] {report.blocked}")
+        _err.print(f"[bold red]stopped:[/bold red] {escape(report.blocked)}")
         raise typer.Exit(3)
     if report.failed:
-        _err.print(f"[bold red]failed:[/bold red] {report.failed}")
+        _err.print(f"[bold red]failed:[/bold red] {escape(report.failed)}")
         raise typer.Exit(4)
     if report.unavailable:
         raise typer.Exit(1)

@@ -137,12 +137,16 @@ the estimate with the lots seen so far would invent a number. Each lot's winner 
 price are kept (`lots`), so a firm is credited only the lots it won.
 
 **What the bulletin does not carry:** a province field. `--by province` stays empty for
-bulletin data; ihalent does not infer it. **What was verified:** the works bulletins of
-12 and 13 November 2026 — 151 of 151 notices read, each file matching its table of
-contents; both were fetched with `fetch-bulletin`, the 12th through the archive form and
-the 13th through the day's own button. A notice that says it has no
-estimate ("- TRY", or a sentence saying so) is read with the estimate left empty. The
-goods, service and consultancy bulletins use the same form but have not been checked yet.
+bulletin data; ihalent does not infer it. **Amounts in another currency:** some goods
+notices price the contract in euros or dollars against a lira estimate. That contract's
+lira price is left empty, with no exchange rate guessed, so it gets no discount; an
+estimate printed in lira with its foreign original beside it is read in lira. **What was
+verified:** the works and goods bulletins of 12 and 13 November 2026 and the service and
+consultancy bulletins of the 13th — 883 of 883 notices read, each file matching its table
+of contents. All were fetched with `fetch-bulletin`: through the archive form (the two
+goods days in one `--since` run) and, for the works bulletin of the 13th, through the
+day's own button. A notice that says it has no estimate ("- TRY", or a sentence saying
+so) is read with the estimate left empty.
 
 **The older path, via ihale-mcp.** Since September 2026 EKAP's search API asks for human
 verification, so collecting with [ihale-mcp](https://github.com/saidsurucu/ihale-mcp)
@@ -234,7 +238,7 @@ to you and the law, not to a default.
 
 I designed the model and the analytics and I review every line; I use AI agents (Claude
 Code) heavily for implementation speed, and the commit trailers say so. The contract is the
-tests — 119 of them, built on the exact JSON shapes EKAP and ihale-mcp emit and on the
+tests — 125 of them, built on the exact JSON shapes EKAP and ihale-mcp emit and on the
 page geometry measured in a real bulletin, including a result notice with a negative
 discount, a cancelled tender, a value that runs onto the next page and a tender awarded in
 lots. They don't care who typed them.

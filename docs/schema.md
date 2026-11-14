@@ -7,13 +7,13 @@ ihalent's interchange format is JSON Lines: one award per line. This page docume
 
 | field | type | meaning |
 |---|---|---|
-| `ikn` | string | İhale Kayıt Numarası, e.g. `"2025/2198370"`. The primary key. |
+| `ikn` | string | İhale Kayıt Numarası, e.g. `"2025/2198370"`, kept as printed (some carry a suffix: `"2026/1007522-4"`). The primary key. |
 | `title` | string \| null | Tender title. |
 | `authority` | string \| null | Awarding authority (idare). |
 | `province` | string \| null | Province. |
 | `tender_type` | string | `mal` \| `yapim` \| `hizmet` \| `danismanlik` \| `unknown`. |
-| `estimate_try` | number \| null | Yaklaşık Maliyeti (public estimate), nominal lira. `null` also when the notice states there is none ("- TRY"). |
-| `contract_try` | number \| null | Sözleşme Bedeli (contract price), nominal lira. |
+| `estimate_try` | number \| null | Yaklaşık Maliyeti (public estimate), nominal lira; the lira figure when a foreign one is printed beside it. `null` also when the notice states there is none ("- TRY"). |
+| `contract_try` | number \| null | Sözleşme Bedeli (contract price), nominal lira. `null` when the bulletin prices the contract in another currency: no exchange rate is guessed. |
 | `winner` | string \| null | Lead bidder (first named party in a joint venture). |
 | `winners_all` | string[] | All named parties (the JV members). |
 | `is_joint_venture` | bool | True if the award went to an İş Ortaklığı. |

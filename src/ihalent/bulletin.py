@@ -50,9 +50,16 @@ COLON_TOLERANCE = 1.0
 
 _LABEL_START = re.compile(r"^[a-zçğıöşü]\)\s", re.IGNORECASE)
 _PART_START = re.compile(r"^(\d)-\s")
-_IKN = re.compile(r"\b(\d{4}/\d{5,})\b")
-_IKN_FULL = re.compile(r"\d{4}/\d{5,}")
+# An İKN can carry a numbered suffix ('2026/1007522-4', services bulletin of 13
+# November 2026); it is kept as printed, so such a notice is never merged into
+# another.
+_IKN = re.compile(r"\b(\d{4}/\d{5,}(?:-\d+)?)\b")
+_IKN_FULL = re.compile(r"\d{4}/\d{5,}(?:-\d+)?")
 _MONEY_FULL = re.compile(r"[\d.]+,\d{2}\s*(TRY|TL|USD|EUR)")
+_MONEY_LIRA = re.compile(r"[\d.]+,\d{2}\s*(TRY|TL)")
+# A tender priced in another currency prints its estimate in lira with the
+# original beside it: '196.199.505,60 TRY (3.664.000,00 EUR)' (goods, 13 Nov 2026).
+_LIRA_WITH_FX = re.compile(r"([\d.]+,\d{2}\s*(?:TRY|TL))\s*\([\d.]+,\d{2}\s*(?:USD|EUR)\)")
 # How a notice says there is no estimate (both seen in the works bulletin of
 # 12 November 2026). Only these exact forms: anything else is still rejected.
 _NO_ESTIMATE = re.compile(
@@ -282,7 +289,9 @@ def _value_cells(rows: Sequence[tuple[int, list[Word]]], colon_x: float) -> list
     A ':' comes either first on a cell's first line or alone in a cell's vertical
     middle. A new cell starts on a new page or where the line spacing widens; a
     cell that opens a page with no ':' of its own continues the previous page's
-    value. Every cell must end up with exactly one ':'."""
+    value, and one that closes a page with no ':' is the start of the next page's
+    first cell (its label and ':' went over the page break). Every cell must end
+    up with exactly one ':'."""
     texts: list[dict[str, Any]] = []
     lone: list[tuple[int, float]] = []
     for page, ws in rows:
@@ -328,8 +337,12 @@ def _value_cells(rows: Sequence[tuple[int, list[Word]]], colon_x: float) -> list
 
     merged: list[dict[str, Any]] = []
     for c in cells:
-        if c["opens_page"] and c["colons"] == 0 and merged:
-            merged[-1]["parts"].extend(c["parts"])  # value ran onto this page
+        prev = merged[-1] if merged else None
+        if c["opens_page"] and c["colons"] == 0 and prev:
+            prev["parts"].extend(c["parts"])  # value ran onto this page
+        elif c["opens_page"] and c["colons"] == 1 and prev and prev["colons"] == 0:
+            c["parts"] = prev["parts"] + c["parts"]  # it began at the foot of the last
+            merged[-1] = c
         else:
             merged.append(c)
     bad = [c for c in merged if c["colons"] != 1]
@@ -350,7 +363,7 @@ def _title_and_authority(header: Sequence[str]) -> tuple[str | None, str | None,
         last = text.rsplit(" ", 1)[-1]
         glue = "" if len(last) > 1 and last.endswith("-") else " "
         text = (text + glue + line) if text else line
-    m = re.match(r"^\d+\.\s+(\d{4}/\d{5,})\s+(.*)$", text)
+    m = re.match(r"^\d+\.\s+(\d{4}/\d{5,}(?:-\d+)?)\s+(.*)$", text)
     if not m:
         return None, None, None
     ikn, body = m.group(1), m.group(2)
@@ -384,7 +397,11 @@ def _type_problems(fields: Sequence[tuple[str, str, str]]) -> list[str]:
         if not value:
             continue
         if "yaklasik maliyeti" in lab:
-            ok = bool(_MONEY_FULL.fullmatch(value) or _NO_ESTIMATE.fullmatch(value))
+            ok = bool(
+                _MONEY_FULL.fullmatch(value)
+                or _NO_ESTIMATE.fullmatch(value)
+                or _LIRA_WITH_FX.fullmatch(value)
+            )
         elif part == "4" and lab == "bedeli":
             ok = bool(_MONEY_FULL.fullmatch(value))
         elif lab == "tarihi":
@@ -503,6 +520,17 @@ def _int_or_none(value: str | None) -> int | None:
     return int(value) if value and _INT_FULL.fullmatch(value) else None
 
 
+def _lira(value: str | None) -> float | None:
+    """A lira amount, or None. A notice that says there is no estimate has none,
+    and an amount in euros or dollars is not lira: no exchange rate is guessed."""
+    if not value:
+        return None
+    fx = _LIRA_WITH_FX.fullmatch(value)
+    if fx:
+        value = fx.group(1)  # the lira figure printed beside the original
+    return parse_money_tr(value) if _MONEY_LIRA.fullmatch(value) else None
+
+
 def _iso_date(value: str | None) -> str | None:
     if not value or not _DATE_FULL.fullmatch(value):
         return None
@@ -536,11 +564,8 @@ def award_from_notice(notice: BulletinNotice) -> Award:
         authority=notice.authority,
         province=None,  # the bulletin has no province field; it is not inferred
         tender_type=_tender_type(notice.value("1", "Türü")),
-        # A notice that says it has no estimate leaves it empty, as a missing one.
-        estimate_try=(
-            parse_money_tr(estimate) if estimate and _MONEY_FULL.fullmatch(estimate) else None
-        ),
-        contract_try=parse_money_tr(contract) if contract else None,
+        estimate_try=_lira(estimate),
+        contract_try=_lira(contract),  # empty for a contract priced in EUR or USD
         winner=winner,
         winners_all=winners_all,
         is_joint_venture=is_jv,
