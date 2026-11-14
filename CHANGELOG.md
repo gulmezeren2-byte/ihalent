@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-11-14
 
 - **Read the Kamu İhale Bülteni (`ihalent fetch-bulletin`, `ihalent ingest-bulletin`).**
   Since September 2026 EKAP's search API asks for human verification, so collecting

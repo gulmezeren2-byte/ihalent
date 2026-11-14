@@ -522,7 +522,7 @@ wheels = [
 
 [[package]]
 name = "ihalent"
-version = "0.3.2"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "rich" },
