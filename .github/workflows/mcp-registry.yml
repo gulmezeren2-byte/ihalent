@@ -1,0 +1,74 @@
+name: MCP Registry
+
+# Lists each new version in the MCP Registry (registry.modelcontextprotocol.io)
+# once it is on PyPI, so the listing no longer stays behind (it sat at 0.3.0
+# for three releases). GitHub OIDC: no token is stored anywhere. The registry
+# checks ownership through the `mcp-name:` line in README.md.
+#
+# It runs on the same version tags as the Release workflow and waits for PyPI.
+# To list a version that is already on PyPI, run it by hand with that version.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "A version already on PyPI, e.g. 0.5.0"
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC sign-in to the registry
+      contents: read
+    env:
+      # Pinned on purpose; raise it deliberately, never use releases/latest.
+      MCP_PUBLISHER_VERSION: v1.8.9
+      WANTED: ${{ inputs.version || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the version and wait for it on PyPI
+        run: |
+          set -euo pipefail
+          version="${WANTED#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a version: $WANTED"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do
+            curl --fail --silent --output /dev/null "https://pypi.org/pypi/ihalent/$version/json" && exit 0
+            echo "ihalent $version is not on PyPI yet; waiting"
+            sleep 30
+          done
+          echo "ihalent $version never appeared on PyPI"; exit 1
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Download and verify mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl --fail --location --silent --show-error --output "$archive" "$base_url/$archive"
+          curl --fail --location --silent --show-error --output "$archive.sigstore.json" "$base_url/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "$archive.sigstore.json"
+
+      - name: Set the version in server.json
+        run: |
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' server.json > server.tmp
+          mv server.tmp server.json
+          cat server.json
+
+      - name: Sign in to the MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish
+        run: ./mcp-publisher publish
