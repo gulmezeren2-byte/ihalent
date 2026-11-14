@@ -12,7 +12,7 @@ ihalent's interchange format is JSON Lines: one award per line. This page docume
 | `authority` | string \| null | Awarding authority (idare). |
 | `province` | string \| null | Province. |
 | `tender_type` | string | `mal` \| `yapim` \| `hizmet` \| `danismanlik` \| `unknown`. |
-| `estimate_try` | number \| null | Yaklaşık Maliyeti (public estimate), nominal lira. |
+| `estimate_try` | number \| null | Yaklaşık Maliyeti (public estimate), nominal lira. `null` also when the notice states there is none ("- TRY"). |
 | `contract_try` | number \| null | Sözleşme Bedeli (contract price), nominal lira. |
 | `winner` | string \| null | Lead bidder (first named party in a joint venture). |
 | `winners_all` | string[] | All named parties (the JV members). |
@@ -22,12 +22,15 @@ ihalent's interchange format is JSON Lines: one award per line. This page docume
 | `valid_bid_count` | int \| null | Toplam Geçerli Teklif Sayısı. |
 | `result_date` | string \| null | Contract date, ISO (`YYYY-MM-DD`) where parseable. |
 | `cancelled` | bool | True for a cancelled tender (result notice with no winner/price). |
+| `lot_count` | int | How many per-lot notices (kısmi teklif) were merged into this record; 1 otherwise. |
+| `lots_unverified` | bool | True when the record is built from per-lot notices with no proof that every lot is in it (the bulletin prints lots on different days). `discount_pct` is then `null`. Defaults to `false`. |
+| `lots` | object[] | One entry per lot when several lot notices were merged, else empty: `winners` (string[], lead first), `contract_try` (number \| null), `is_joint_venture` (bool). `winner` / `winners_all` then name every lot's winners; firm totals credit each firm only its own lots. Defaults to `[]`. |
 
 Two fields are **computed** and appear in serialized output but are never stored as input:
 
 | field | type | meaning |
 |---|---|---|
-| `discount_pct` | number \| null | `100 * (estimate - contract) / estimate`, rounded to 2 dp. `null` if either value is missing or the estimate is 0. Negative means the contract came in *above* estimate. |
+| `discount_pct` | number \| null | `100 * (estimate - contract) / estimate`, rounded to 2 dp. `null` if either value is missing, the estimate is 0, or `lots_unverified` is true. Negative means the contract came in *above* estimate. |
 | `single_bid` | bool \| null | `valid_bid_count <= 1`. `null` if the count is missing. |
 
 ### The null discipline

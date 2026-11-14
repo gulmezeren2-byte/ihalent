@@ -105,7 +105,8 @@ def _merge_lots(lots: list[Award]) -> Award:
     estimates are counted once; genuinely per-lot estimates (all different) are
     summed. Bid counts are per-lot and don't aggregate to a meaningful
     tender-level number, so they are left unknown rather than misleadingly
-    summed. lot_count records how many parts were merged."""
+    summed. lot_count records how many parts were merged, and ``lots`` who won
+    each one for how much."""
     first = lots[0]
     contracts = [a.contract_try for a in lots if a.contract_try is not None]
     contract_total = round(sum(contracts), 2) if contracts else None
@@ -141,6 +142,7 @@ def _merge_lots(lots: list[Award]) -> Award:
         result_date=first.result_date,
         cancelled=False,
         lot_count=len(lots),
+        lots=[part for a in lots for part in a.parts()],  # who won which lot
     )
 
 

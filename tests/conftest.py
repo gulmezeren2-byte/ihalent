@@ -15,10 +15,13 @@ import pytest
 NOTICE_AWARD_JV = """**SONUÇ İLANI****BİNA ONARIMI YAPTIRILACAKTIR**
 
 | **İhale kayıt numarası** | **:** | **2025/2337797** |
+| **1- İhalenin** | | |
+| **a)** Tarihi | : | 31.12.2025 |
 | **d)** Yaklaşık Maliyeti | : | 2.783.270,09 TRY |
 | **a)** Dokümanı EKAP üzerinden e-imza kullanarak indiren sayısı | : | 8 |
 | **b)** Toplam Teklif Sayısı | : | 4 |
 | **c)** Toplam Geçerli Teklif Sayısı | : | 3 |
+| **4- Sözleşmenin** | | |
 | **a)** Tarihi | : | 26.01.2026 |
 | **b)** Bedeli | : | 2.227.000,00 TRY |
 | **d)** Yüklenicisi | : | MUHAMMED HANEFİ YILDIRIM, BEDKURT GIDA İNŞAAT OTOMOTİV LİMİTED ŞİRKETİ İş Ortaklığı |

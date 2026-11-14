@@ -152,9 +152,19 @@ def parse_result_notice(
         downloaders=_int(_row("indiren sayısı", md)),
         bid_count=_int(_row("Toplam Teklif Sayısı", md)),
         valid_bid_count=_int(_row("Geçerli Teklif Sayısı", md)),
-        result_date=_parse_date(_row("Tarihi", md)),
+        result_date=_contract_date(md),
         cancelled=cancelled,
     )
+
+
+def _contract_date(md: str) -> str | None:
+    """The date in the '4- Sözleşmenin' section. The first 'Tarihi' row in a notice
+    is the tender's date (part 1); without a contract section there is no result date."""
+    lines = md.splitlines()
+    for i, line in enumerate(lines):
+        if "sozlesmenin" in _fold(line):
+            return _parse_date(_row("Tarihi", "\n".join(lines[i + 1 :])))
+    return None
 
 
 def _parse_date(cell: str | None) -> str | None:

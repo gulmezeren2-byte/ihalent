@@ -4,10 +4,12 @@
     ihalent firm      awards.jsonl "ACME İNŞAAT"
     ihalent discounts awards.jsonl --by authority --min 5
     ihalent parse     notice.md
+    ihalent fetch-bulletin --out bulletins
+    ihalent ingest-bulletin bulletins -o awards.jsonl
 
-The dataset commands read a JSONL file of awards (see `ihalent parse` and the
-collector to produce one). Every command has a --json form for pipelines and
-agents; the human form always prints the coverage behind each number.
+The dataset commands read a JSONL file of awards (`ihalent ingest-bulletin`,
+`ihalent ingest` and `ihalent parse` produce one). Every command has a --json form
+for pipelines and agents; the human form always prints the coverage behind each number.
 """
 
 from __future__ import annotations
@@ -160,7 +162,10 @@ def discounts(
             f"{g.coverage.used}/{g.coverage.considered}",
         )
     _console.print(table)
-    _console.print("[dim]awards column: used / considered (excluded lack an estimate).[/dim]")
+    _console.print(
+        "[dim]awards column: used / considered "
+        "(excluded lack an estimate, or were awarded in lots).[/dim]"
+    )
 
 
 @app.command("single-bid")
@@ -309,6 +314,135 @@ def ingest(
         raise typer.Exit(1)
     n = dump_awards(awards, out)
     _console.print(f"wrote {out} — {n} award(s) with result notices")
+
+
+def _bulletin_files(paths: list[Path]) -> list[Path]:
+    files: list[Path] = []
+    for p in paths:
+        if p.is_dir():
+            files += sorted(
+                f for f in p.iterdir()
+                if f.suffix.lower() == ".zip" or f.name.upper().endswith("_SONUC.PDF")
+            )
+        elif p.is_file():
+            files.append(p)
+        else:
+            _err.print(f"[bold red]error:[/bold red] not found: {p}")
+            raise typer.Exit(2)
+    return files
+
+
+@app.command("ingest-bulletin")
+def ingest_bulletin_cmd(
+    paths: list[Path] = typer.Argument(
+        ..., help="Bulletin ZIPs or *_SONUC.pdf files, or folders of them."
+    ),
+    out: Path = typer.Option(Path("awards.jsonl"), "--out", "-o", help="Where to write awards."),
+    as_json: bool = typer.Option(False, "--json", help="Print the per-file check as JSON."),
+) -> None:
+    """Read Kamu İhale Bülteni result notices into an awards JSONL file.
+
+    Give it every bulletin collected so far, not one day: a tender's lots are
+    published on different days, and the file is rebuilt from all of them.
+    Each file is checked against its own table of contents; the command exits 1
+    if any notice could not be read or the counts disagree."""
+    from ihalent.bulletin import (
+        BulletinError,
+        BulletinRead,
+        MissingExtra,
+        awards_from_reads,
+        read_bulletin,
+    )
+
+    files = _bulletin_files(paths)
+    if not files:
+        _err.print("[yellow]No bulletin files found.[/yellow]")
+        raise typer.Exit(1)
+    reads: list[BulletinRead] = []
+    for f in files:
+        try:
+            got = read_bulletin(f)
+        except MissingExtra as exc:
+            _err.print(f"[bold red]error:[/bold red] {exc}")
+            raise typer.Exit(2) from exc
+        except (BulletinError, OSError) as exc:
+            _err.print(f"[bold red]error:[/bold red] {exc}")
+            raise typer.Exit(2) from exc
+        # A ZIP and the PDF unpacked from it are one file: report it once.
+        reads += [r for r in got if r.source not in {s.source for s in reads}]
+    awards = awards_from_reads(reads)
+    n = dump_awards(awards, out)
+    incomplete = [r for r in reads if not r.complete]
+    if as_json:
+        typer.echo(json.dumps(
+            {"files": [r.to_dict() for r in reads], "awards": n, "out": str(out)},
+            ensure_ascii=True, indent=2,
+        ))
+    else:
+        for r in reads:
+            mark = "ok" if r.complete else "[bold red]CHECK[/bold red]"
+            _console.print(
+                f"{mark}  {r.source}: {len(r.notices)} notice(s) read, "
+                f"{len(r.rejected)} rejected, contents list {len(r.toc_ikns)}"
+                + (f", missing {len(r.missing)}" if r.missing else "")
+                + (f", unlisted {len(r.unlisted)}" if r.unlisted else "")
+            )
+            for rej in r.rejected:
+                _console.print(f"      notice {rej.position} (page {rej.page}): {rej.reason}")
+        lots = sum(1 for a in awards if a.lots_unverified)
+        _console.print(
+            f"wrote {out} — {n} tender(s)"
+            + (f"; {lots} awarded in lots, so no discount for them" if lots else "")
+        )
+    if incomplete:
+        raise typer.Exit(1)
+
+
+@app.command("fetch-bulletin")
+def fetch_bulletin_cmd(
+    out: Path = typer.Option(Path("bulletins"), "--out", "-o", help="Folder to keep the files in."),
+    day: str | None = typer.Option(None, "--date", help="YYYY-MM-DD; default today."),
+    since: str | None = typer.Option(
+        None, "--since", help="Also fetch every working day from this date (YYYY-MM-DD)."
+    ),
+    kind: str = typer.Option("yapim", "--type", help="yapim | mal | hizmet | danismanlik."),
+) -> None:
+    """Download Kamu İhale Bülteni files from EKAP's public bulletin page.
+
+    One file per working day and tender type, at least two seconds apart, never
+    twice. It stops, without retrying, if the page asks for human verification
+    or refuses the request (exit 3), or on a network or server error (exit 4).
+    Days with no bulletin are listed (exit 1)."""
+    from datetime import date as _date
+
+    from ihalent.fetch import TYPE_CODE, fetch_range
+    from ihalent.model import TenderType
+
+    try:
+        tender_type = TenderType(kind)
+        if tender_type not in TYPE_CODE:
+            raise ValueError
+        end = _date.fromisoformat(day) if day else _date.today()
+        start = _date.fromisoformat(since) if since else end
+    except ValueError as exc:
+        _err.print("[bold red]error:[/bold red] check --type and the YYYY-MM-DD dates")
+        raise typer.Exit(2) from exc
+    if start > end:
+        _err.print("[bold red]error:[/bold red] --since is after --date")
+        raise typer.Exit(2)
+    report = fetch_range(start, end, tender_type, out)
+    for r in report.results:
+        _console.print(f"{'got ' if r.downloaded else 'have'}  {r.path}")
+    for d, why in report.unavailable:
+        _console.print(f"none  {d.isoformat()}: {why}")
+    if report.blocked:
+        _err.print(f"[bold red]stopped:[/bold red] {report.blocked}")
+        raise typer.Exit(3)
+    if report.failed:
+        _err.print(f"[bold red]failed:[/bold red] {report.failed}")
+        raise typer.Exit(4)
+    if report.unavailable:
+        raise typer.Exit(1)
 
 
 def main() -> None:

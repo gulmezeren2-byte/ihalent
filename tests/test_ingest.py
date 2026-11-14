@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ihalent.ingest import award_from_announcements, find_result_notice, ingest_bundle
-from ihalent.model import TenderType
+from ihalent.model import Award, TenderType
 
 # A trimmed but real-shaped get_tender_announcements response: a pre-notice and
 # a result notice, exactly as ihale-mcp returns them.
@@ -120,6 +120,18 @@ def test_multi_lot_merges_and_fixes_the_fabricated_discount() -> None:
     assert a.discount_pct == 10.0  # (200-180)/200 — not the 65% fabrication
     assert len(a.winners_all) == 3
     assert a.valid_bid_count is None  # per-lot; not aggregated to tender level
+    # Who won which lot, for how much, is kept, and survives a save and reload.
+    assert [(lot.winners, lot.contract_try) for lot in a.lots] == [
+        (["A İNŞAAT LTD"], 70_000_000.0),
+        (["B İNŞAAT LTD"], 60_000_000.0),
+        (["C İNŞAAT LTD"], 50_000_000.0),
+    ]
+    assert Award.from_dict(a.to_dict()).lots == a.lots
+
+
+def test_a_record_saved_before_lots_were_kept_loads_without_them() -> None:
+    old = {"ikn": "2025/1", "contract_try": 10.0, "winner": "X", "lot_count": 2}
+    assert Award.from_dict(old).lots == []
 
 
 def test_multi_lot_sums_genuinely_per_lot_estimates() -> None:
