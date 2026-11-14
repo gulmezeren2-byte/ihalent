@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
+
 import pytest
+from rich.console import Console
 
 from ihalent.analytics import (
     by_group,
@@ -14,7 +17,13 @@ from ihalent.analytics import (
     risk_flags,
     slice_awards,
 )
-from ihalent.model import Award, TenderType
+from ihalent.model import Award, Lot, TenderType
+from ihalent.render import (
+    render_concentration,
+    render_discount,
+    render_overview,
+    render_risk,
+)
 
 
 def award(**kw) -> Award:  # type: ignore[no-untyped-def]
@@ -157,6 +166,91 @@ def test_concentration_empty_is_honest() -> None:
     assert conc.hhi is None
     assert conc.distinct_firms == 0
     assert conc.coverage.used == 0
+
+
+# -- tenders awarded in lots ------------------------------------------------
+
+
+def _in_lots() -> Award:
+    # One tender, two lots, different winners; the second lot went to a JV. The
+    # shape of a real case in the works bulletins of 12 and 13 November 2026.
+    return award(
+        ikn="2026/9", authority="C", estimate_try=14_000.0, contract_try=4_449.0,
+        winner="DELTA YAPI", winners_all=["DELTA YAPI", "EPSILON İNŞAAT", "ZETA"],
+        lot_count=2, lots_unverified=True,
+        lots=[
+            Lot(winners=["DELTA YAPI"], contract_try=749.0),
+            Lot(winners=["EPSILON İNŞAAT", "ZETA"], contract_try=3_700.0,
+                is_joint_venture=True),
+        ],
+    )
+
+
+def test_a_firm_is_credited_only_its_own_lot() -> None:
+    delta = firm_profile([_in_lots()], "DELTA YAPI")
+    assert delta is not None
+    assert (delta.wins, delta.total_contract_try, delta.joint_ventures) == (1, 749.0, 0)
+    epsilon = firm_profile([_in_lots()], "EPSILON")
+    assert epsilon is not None
+    assert (epsilon.wins, epsilon.total_contract_try, epsilon.joint_ventures) == (1, 3_700.0, 1)
+    zeta = firm_profile([_in_lots()], "ZETA")
+    assert zeta is not None
+    assert zeta.total_contract_try == 3_700.0  # a JV member, as for any JV
+
+
+def test_a_lot_without_a_price_makes_the_total_a_floor() -> None:
+    a = _in_lots()
+    a.lots[0].contract_try = None
+    delta = firm_profile([a], "DELTA YAPI")
+    assert delta is not None
+    assert (delta.wins, delta.known_contract_count, delta.total_contract_try) == (1, 0, 0.0)
+
+
+def test_concentration_gives_each_lot_to_its_own_winner() -> None:
+    conc = concentration([_in_lots()])
+    assert (conc.coverage.considered, conc.coverage.used) == (2, 2)  # two contracts
+    value = {f.name: f.contract_try for f in conc.top}
+    assert value == {"DELTA YAPI": 749.0, "EPSILON İNŞAAT": 3_700.0}
+    assert conc.hhi == 0.5
+
+
+def test_lots_are_named_as_the_reason_for_no_discount(dataset: list[Award]) -> None:
+    awarded = [a for a in dataset if not a.cancelled] + [_in_lots()]
+    stats = discount_stats(awarded)
+    assert (stats.coverage.excluded, stats.in_lots) == (2, 1)
+    out = io.StringIO()
+    render_discount(stats, Console(file=out, width=200))
+    assert "1 for missing data, 1 awarded in lots" in out.getvalue()
+
+
+def test_a_merged_lot_tender_is_not_called_a_missing_bid_count() -> None:
+    # Bid counts are per lot and are not added up, so a merged tender has none by
+    # design; the notices did print them.
+    ov = overview([_in_lots(), award(ikn="2025/7"), award(ikn="2025/8", valid_bid_count=3)])
+    assert ov.missing_bid_count == 1  # only 2025/7 lacks one
+    assert ov.competition.in_lots == 1
+    out = io.StringIO()
+    render_overview(ov, Console(file=out, width=200))
+    assert "2 excluded: 1 for missing data, 1 awarded in lots" in out.getvalue()
+
+
+def test_a_flagged_tender_in_lots_names_no_single_winner() -> None:
+    a = _in_lots()
+    a.estimate_try = None  # raises the no-estimate flag
+    (row,) = risk_flags([a]).flagged
+    assert (row.winner, row.lot_count, row.contract_try) == (None, 2, 4_449.0)
+    out = io.StringIO()
+    render_risk(risk_flags([a]), Console(file=out, width=200))
+    assert "2 lots" in out.getvalue()
+    assert "DELTA YAPI" not in out.getvalue()  # not shown beside the whole tender's sum
+
+
+def test_concentration_says_when_lots_were_counted_one_by_one() -> None:
+    conc = concentration([_in_lots()])
+    assert conc.lot_contracts == 2
+    out = io.StringIO()
+    render_concentration(conc, Console(file=out, width=200))
+    assert "2 lots of tenders awarded in parts count one by one" in out.getvalue()
 
 
 # -- slice_awards -----------------------------------------------------------

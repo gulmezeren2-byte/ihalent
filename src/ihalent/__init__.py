@@ -5,8 +5,9 @@ Small public surface:
     from ihalent import Award, parse_result_notice, load_awards
     from ihalent.analytics import firm_profile, discount_stats, overview
 
-The parse + analytics core has no network dependency. Live collection from
-EKAP lives behind the `collect` extra so data-crunching pipelines stay light.
+The parse + analytics core has no network dependency. The only network step is
+`ihalent.fetch`, which downloads the public Kamu İhale Bülteni files; reading
+them (`ihalent.bulletin`) needs the `bulletin` extra.
 """
 
 from importlib.metadata import PackageNotFoundError, version

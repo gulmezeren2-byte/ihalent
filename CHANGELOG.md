@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased
+
+- **Read the Kamu İhale Bülteni (`ihalent fetch-bulletin`, `ihalent ingest-bulletin`).**
+  Since September 2026 EKAP's search API asks for human verification, so collecting
+  notices with ihale-mcp from your own machine fails with HTTP 428 (issue #1). ihalent
+  does not try to get past that. It now reads the daily bulletin KİK publishes every
+  result notice in, by law, on a public page: `fetch-bulletin` downloads the files (one
+  per working day and tender type, at least two seconds apart, never twice, and it stops
+  at the first verification screen or refusal), and `ingest-bulletin` reads them. The
+  notice form's two columns don't line up row by row, so labels and values are paired
+  cell by cell; every file is checked against its own table of contents, and a notice
+  that doesn't add up is rejected, not guessed. A notice that states it has no estimate
+  ("- TRY", or a sentence saying so) is read with the estimate left empty. Verified on
+  the works bulletins of 12 and 13 November 2026: 151 of 151 notices, both fetched with
+  `fetch-bulletin` (the 12th through the page's archive form, the 13th through its
+  button for the day). Needs the new `bulletin` extra (pdfplumber).
+- **New field `lots_unverified`, and no discount for it.** A tender awarded in parts gets
+  one notice per lot, published on different days, each with the tender-wide estimate.
+  Merged, its contracts are summed, but its discount is now `null`: nothing says when the
+  last lot has been printed. Records written before this field load as before.
+- **Fixed: a firm that won one lot was credited the whole tender.** A merged record kept
+  only the summed contract, so `firm` gave every lot winner the full sum and
+  `concentration` gave all of it to the first lot's winner (on the works bulletins of
+  12–13 November 2026, one firm showed 5.3 million TL where its two lots came to
+  1.6 million). Records now keep `lots` — who won each lot, for how much — and both
+  views credit a firm only its own lots; `concentration` counts each lot as its own
+  award. Records written before this still load, but without `lots` they credit as
+  before: run `ingest` / `ingest-bulletin` again to get the per-lot credit.
+- **A tender in lots is no longer called "missing data".** It has no discount (its other
+  lots may still come) and no tender-wide bid count (bid counts are per lot); the
+  summaries now say "awarded in lots", and the overview no longer counts it as an
+  award without a bid count. In `flags`, such a tender's row shows "N lots" instead of
+  the first lot's winner beside the whole tender's sum.
+- **Fixed: `result_date` is the contract date, as the schema always said.** The markdown
+  parser for ihale-mcp notices took the first date in the notice, which is the tender
+  date. It now reads the date in the contract section (`4- Sözleşmenin`), and leaves
+  `result_date` empty when that section prints none — as six of the shipped example
+  notices do, so the example dataset changed accordingly. Bulletin records read the
+  contract date too.
+
 ## 0.3.2 — 2026-07-30
 
 - **Fixed: the MCP server would not start with version 2 of the MCP SDK.** The SDK

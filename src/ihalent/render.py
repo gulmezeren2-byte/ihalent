@@ -40,9 +40,13 @@ def fmt_pct(value: float | None) -> str:
     return "-" if value is None else f"{value:.2f}%"
 
 
-def _coverage_note(cov: Coverage, what: str) -> str:
+def _coverage_note(cov: Coverage, what: str, in_lots: int = 0) -> str:
     if cov.excluded == 0:
         return f"based on all {cov.used} {what}"
+    if in_lots:  # excluded because of how lots work, not because data is missing
+        missing = cov.excluded - in_lots
+        reason = (f"{missing} for missing data, " if missing else "") + f"{in_lots} awarded in lots"
+        return f"based on {cov.used} of {cov.considered} {what} ({cov.excluded} excluded: {reason})"
     return (
         f"based on {cov.used} of {cov.considered} {what} "
         f"({cov.excluded} excluded for missing data)"
@@ -53,7 +57,7 @@ def render_discount(stats: DiscountStats, console: Console) -> None:
     if stats.mean is None:
         console.print(
             f"[yellow]No discount could be computed for {stats.label}[/] "
-            f"({_coverage_note(stats.coverage, 'awards')})."
+            f"({_coverage_note(stats.coverage, 'awards', stats.in_lots)})."
         )
         return
     table = Table(title=f"Discount (kırım) — {stats.label}", title_justify="left")
@@ -65,7 +69,7 @@ def render_discount(stats: DiscountStats, console: Console) -> None:
         fmt_pct(stats.mean), fmt_pct(stats.median), fmt_pct(stats.min), fmt_pct(stats.max)
     )
     console.print(table)
-    console.print(f"[dim]{_coverage_note(stats.coverage, 'awards')}.[/dim]")
+    console.print(f"[dim]{_coverage_note(stats.coverage, 'awards', stats.in_lots)}.[/dim]")
 
 
 def render_firm(profile: FirmProfile, console: Console) -> None:
@@ -121,9 +125,13 @@ def render_concentration(conc: Concentration, console: Console) -> None:
     for f in conc.top:
         table.add_row(f.name, str(f.wins), f"{f.win_share:.1%}", fmt_try(f.contract_try))
     console.print(table)
+    lots = (
+        f"; the {conc.lot_contracts} lots of tenders awarded in parts count one by one"
+        if conc.lot_contracts else ""
+    )
     console.print(
         f"[dim]{_coverage_note(conc.coverage, 'awards')}; HHI over win counts, "
-        f"each award attributed to its lead winner.[/dim]"
+        f"each award attributed to its lead winner{lots}.[/dim]"
     )
 
 
@@ -149,7 +157,7 @@ def render_risk(report: RiskReport, console: Console) -> None:
         table.add_row(
             a.ikn,
             a.authority or "-",
-            a.winner or "-",
+            a.winner or (f"{a.lot_count} lots" if a.lot_count > 1 else "-"),
             fmt_try(a.contract_try),
             fmt_pct(a.discount_pct),
             ", ".join(_FLAG_TEXT.get(f, f) for f in a.flags),
@@ -175,7 +183,7 @@ def render_overview(ov: Overview, console: Console) -> None:
             f"(median {comp.median_bids}); "
             f"{comp.single_bid_share:.1%} of awards had a single valid bid"
         )
-        console.print(f"  [dim]{_coverage_note(comp.coverage, 'awards')}.[/dim]")
+        console.print(f"  [dim]{_coverage_note(comp.coverage, 'awards', comp.in_lots)}.[/dim]")
     console.print(
         f"  [dim]data gaps: {ov.missing_estimate} awards without an estimate, "
         f"{ov.missing_bid_count} without a bid count.[/dim]"

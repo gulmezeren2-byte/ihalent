@@ -33,6 +33,16 @@ TENDER_TYPE_BY_CODE = {
 
 
 @dataclass
+class Lot:
+    """One part of a tender awarded in parts (kısmi teklif): who won it, and for
+    how much. Each lot is its own contract, so a firm is credited only its lot."""
+
+    winners: list[str] = field(default_factory=list)  # lead first; several for a JV
+    contract_try: float | None = None
+    is_joint_venture: bool = False
+
+
+@dataclass
 class Award:
     """A single awarded (or cancelled) tender, as published in its result notice.
 
@@ -60,6 +70,20 @@ class Award:
     result_date: str | None = None  # contract date, ISO where known
     cancelled: bool = False
     lot_count: int = 1  # >1 when a tender was awarded in parts (kısmi teklif)
+    # True when the record holds per-lot notices with no proof that every lot is
+    # in it. The bulletin publishes a tender's lots on different days and prints
+    # the tender-wide estimate on each, so estimate-vs-contract would be a guess.
+    lots_unverified: bool = False
+    # One entry per lot when the record merges several lot notices; empty otherwise.
+    # winner / winners_all then name every lot's winners; this says who won what.
+    lots: list[Lot] = field(default_factory=list)
+
+    def parts(self) -> list[Lot]:
+        """The contracts in this award: its lots, or the award itself as one."""
+        if self.lots:
+            return self.lots
+        members = self.winners_all or ([self.winner] if self.winner else [])
+        return [Lot(list(members), self.contract_try, self.is_joint_venture)]
 
     @property
     def is_partial(self) -> bool:
@@ -71,8 +95,11 @@ class Award:
     @property
     def discount_pct(self) -> float | None:
         """Kırım / tenzilat: how far below the public estimate the contract
-        landed, as a percent. Undefined without both numbers, and undefined
-        (not infinite) if the estimate is zero."""
+        landed, as a percent. Undefined without both numbers, undefined (not
+        infinite) if the estimate is zero, and undefined when the contract side
+        may be missing lots (``lots_unverified``)."""
+        if self.lots_unverified:
+            return None
         if self.estimate_try is None or self.contract_try is None:
             return None
         if self.estimate_try == 0:
@@ -118,4 +145,13 @@ class Award:
             result_date=d.get("result_date"),
             cancelled=bool(d.get("cancelled", False)),
             lot_count=int(d.get("lot_count", 1) or 1),
+            lots_unverified=bool(d.get("lots_unverified", False)),
+            lots=[
+                Lot(
+                    winners=list(lot.get("winners") or []),
+                    contract_try=lot.get("contract_try"),
+                    is_joint_venture=bool(lot.get("is_joint_venture", False)),
+                )
+                for lot in d.get("lots") or []
+            ],
         )

@@ -32,8 +32,19 @@ def test_parse_award_with_discount(notice_award_jv: str) -> None:
     assert a.single_bid is False
     assert a.is_joint_venture is True
     assert a.winner == "MUHAMMED HANEFİ YILDIRIM"
+    # The contract date (part 4), not the tender date above it (31.12.2025).
     assert a.result_date == "2026-01-26"
     assert a.cancelled is False
+
+
+def test_without_a_contract_section_there_is_no_result_date() -> None:
+    # Only the tender's own date is printed: it is not passed off as the result date.
+    md = (
+        "**SONUÇ İLANI**\n| **İhale kayıt numarası** | **:** | **2025/2500002** |\n"
+        "| **1- İhalenin** | | |\n| **a)** Tarihi | : | 31.12.2025 |\n"
+        "| **d)** Yüklenicisi | : | ÖRNEK LTD |\n"
+    )
+    assert parse_result_notice(md).result_date is None
 
 
 def test_parse_large_award(notice_award_big: str) -> None:

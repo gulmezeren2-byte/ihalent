@@ -45,6 +45,8 @@ dependencies = [
 # The MCP server is an extra so the parse+analytics core and CLI stay
 # dependency-light for pipelines that never touch an agent runtime.
 mcp = ["mcp>=1.2"]
+# Reading the Kamu İhale Bülteni PDFs. Kept out of the core for the same reason.
+bulletin = ["pdfplumber>=0.11"]
 
 [project.urls]
 Homepage = "https://github.com/gulmezeren2-byte/ihalent"
@@ -88,7 +90,7 @@ no_implicit_optional = true
 
 [[tool.mypy.overrides]]
 # mcp is an optional extra; the server module guards its import at runtime.
-module = ["mcp.*"]
+module = ["mcp.*", "pdfplumber.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

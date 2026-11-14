@@ -22,7 +22,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from statistics import median
 
-from ihalent.model import Award, TenderType
+from ihalent.model import Award, Lot, TenderType
 from ihalent.normalize import display_name, normalize_company
 
 
@@ -39,17 +39,20 @@ class Coverage:
         return {"considered": self.considered, "used": self.used, "excluded": self.excluded}
 
 
-def _discounts(awards: Iterable[Award]) -> tuple[list[float], Coverage]:
+def _discounts(awards: Iterable[Award]) -> tuple[list[float], Coverage, int]:
     considered = 0
+    in_lots = 0
     values: list[float] = []
     for a in awards:
         if a.cancelled:
             continue
         considered += 1
+        if a.lots_unverified:
+            in_lots += 1
         d = a.discount_pct
         if d is not None:
             values.append(d)
-    return values, Coverage(considered=considered, used=len(values))
+    return values, Coverage(considered=considered, used=len(values)), in_lots
 
 
 @dataclass
@@ -60,6 +63,7 @@ class DiscountStats:
     median: float | None = None
     min: float | None = None
     max: float | None = None
+    in_lots: int = 0  # of the excluded: awarded in lots, so no discount (not missing data)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -69,16 +73,18 @@ class DiscountStats:
             "median": self.median,
             "min": self.min,
             "max": self.max,
+            "excluded_in_lots": self.in_lots,
         }
 
 
 def discount_stats(awards: Iterable[Award], label: str = "all awards") -> DiscountStats:
-    values, coverage = _discounts(awards)
+    values, coverage, in_lots = _discounts(awards)
     if not values:
-        return DiscountStats(label=label, coverage=coverage)
+        return DiscountStats(label=label, coverage=coverage, in_lots=in_lots)
     return DiscountStats(
         label=label,
         coverage=coverage,
+        in_lots=in_lots,
         mean=round(sum(values) / len(values), 2),
         median=round(median(values), 2),
         min=round(min(values), 2),
@@ -129,24 +135,31 @@ def firm_profile(awards: Sequence[Award], query: str, *, exact: bool = False) ->
     if not key:
         return None
     matched: list[Award] = []
+    won: list[list[Lot]] = []  # per matched award, the lots this firm won (or the whole)
     raw_names: list[str] = []
     matched_keys: set[str] = set()
     for a in awards:
         if a.cancelled:
             continue
-        for member in a.winners_all or ([a.winner] if a.winner else []):
-            member_key = normalize_company(member)
-            hit = member_key == key if exact else key in member_key
-            if hit:
-                matched.append(a)
-                raw_names.append(member)
-                matched_keys.add(member_key)
-                break
+        own: list[Lot] = []
+        for part in a.parts():
+            for member in part.winners:
+                member_key = normalize_company(member)
+                hit = member_key == key if exact else key in member_key
+                if hit:
+                    own.append(part)
+                    raw_names.append(member)
+                    matched_keys.add(member_key)
+                    break
+        if own:
+            matched.append(a)
+            won.append(own)
     if not matched:
         return None
 
-    total = sum(a.contract_try for a in matched if a.contract_try is not None)
-    known = sum(1 for a in matched if a.contract_try is not None)
+    # A firm is credited the lots it won, not the whole tender's sum.
+    total = sum(p.contract_try for own in won for p in own if p.contract_try is not None)
+    known = sum(1 for own in won if all(p.contract_try is not None for p in own))
     authorities: dict[str, int] = {}
     provinces: dict[str, int] = {}
     for a in matched:
@@ -162,7 +175,7 @@ def firm_profile(awards: Sequence[Award], query: str, *, exact: bool = False) ->
         total_contract_try=total,
         known_contract_count=known,
         discount=discount_stats(matched, label=display_name(raw_names)),
-        joint_ventures=sum(1 for a in matched if a.is_joint_venture),
+        joint_ventures=sum(1 for own in won if any(p.is_joint_venture for p in own)),
         distinct_spellings=len(matched_keys),
         authorities=authorities,
         provinces=provinces,
@@ -175,6 +188,7 @@ class CompetitionStats:
     mean_bids: float | None = None
     median_bids: float | None = None
     single_bid_share: float | None = None  # fraction of awards with <=1 valid bid
+    in_lots: int = 0  # of the excluded: merged lot tenders (bid counts are per lot)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -182,26 +196,35 @@ class CompetitionStats:
             "mean_bids": self.mean_bids,
             "median_bids": self.median_bids,
             "single_bid_share": self.single_bid_share,
+            "excluded_in_lots": self.in_lots,
         }
+
+
+def _bids_merged_away(a: Award) -> bool:
+    """A merged lot tender has no tender-level bid count by design (ingest._merge_lots)."""
+    return a.is_partial and a.valid_bid_count is None
 
 
 def competition_stats(awards: Iterable[Award]) -> CompetitionStats:
     considered = 0
+    in_lots = 0
     counts: list[int] = []
     singles = 0
     for a in awards:
         if a.cancelled:
             continue
         considered += 1
+        in_lots += _bids_merged_away(a)
         if a.valid_bid_count is not None:
             counts.append(a.valid_bid_count)
             if a.valid_bid_count <= 1:
                 singles += 1
     coverage = Coverage(considered=considered, used=len(counts))
     if not counts:
-        return CompetitionStats(coverage=coverage)
+        return CompetitionStats(coverage=coverage, in_lots=in_lots)
     return CompetitionStats(
         coverage=coverage,
+        in_lots=in_lots,
         mean_bids=round(sum(counts) / len(counts), 2),
         median_bids=round(median(counts), 2),
         single_bid_share=round(singles / len(counts), 3),
@@ -233,6 +256,7 @@ class Concentration:
     distinct_firms: int
     hhi: float | None = None  # 0..1 over win counts; None if nothing usable
     top: list[FirmShare] = field(default_factory=list)
+    lot_contracts: int = 0  # lots of tenders in parts, each counted as its own award
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -241,11 +265,8 @@ class Concentration:
             "distinct_firms": self.distinct_firms,
             "hhi": self.hhi,
             "top": [f.to_dict() for f in self.top],
+            "lot_contracts": self.lot_contracts,
         }
-
-
-def _lead_winner(a: Award) -> str | None:
-    return a.winner or (a.winners_all[0] if a.winners_all else None)
 
 
 def concentration(
@@ -253,7 +274,8 @@ def concentration(
 ) -> Concentration:
     """How concentrated are the winners over a set of awards?
 
-    Each award is attributed to its lead winner, spelling variants are folded
+    Each award (each lot, for a tender awarded in parts) is attributed to its
+    lead winner, spelling variants are folded
     (so "ACME İNŞAAT" and "Acme Insaat Ltd." are one firm), and the result
     reports the Herfindahl-Hirschman Index over win counts plus the leading
     firms. Where single-bid share measures competition *within* one tender, this
@@ -266,26 +288,31 @@ def concentration(
     a verdict: a small authority with few tenders is concentrated by arithmetic,
     which is exactly why the coverage travels with the number."""
     considered = 0
+    lot_contracts = 0
     wins: dict[str, int] = {}
     value: dict[str, float] = {}
     names: dict[str, list[str]] = {}
     for a in awards:
         if a.cancelled:
             continue
-        considered += 1
-        lead = _lead_winner(a)
-        key = normalize_company(lead) if lead else ""
-        if not key:
-            continue
-        wins[key] = wins.get(key, 0) + 1
-        if a.contract_try is not None:
-            value[key] = value.get(key, 0.0) + a.contract_try
-        names.setdefault(key, []).append(lead)  # type: ignore[arg-type]
+        lot_contracts += len(a.lots)
+        for part in a.parts():  # each lot is its own contract with its own winner
+            considered += 1
+            lead = part.winners[0] if part.winners else None
+            key = normalize_company(lead) if lead else ""
+            if not key:
+                continue
+            wins[key] = wins.get(key, 0) + 1
+            if part.contract_try is not None:
+                value[key] = value.get(key, 0.0) + part.contract_try
+            names.setdefault(key, []).append(lead)  # type: ignore[arg-type]
 
     used = sum(wins.values())
     coverage = Coverage(considered=considered, used=used)
     if used == 0:
-        return Concentration(label=label, coverage=coverage, distinct_firms=0)
+        return Concentration(
+            label=label, coverage=coverage, distinct_firms=0, lot_contracts=lot_contracts
+        )
 
     hhi = round(sum((n / used) ** 2 for n in wins.values()), 4)
     shares = [
@@ -305,6 +332,7 @@ def concentration(
         distinct_firms=len(wins),
         hhi=hhi,
         top=shares[:top],
+        lot_contracts=lot_contracts,
     )
 
 
@@ -344,6 +372,7 @@ class AwardFlags:
     contract_try: float | None
     discount_pct: float | None
     flags: list[str]
+    lot_count: int = 1  # >1: several lots, several winners; ``winner`` is then None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -351,6 +380,7 @@ class AwardFlags:
             "title": self.title,
             "authority": self.authority,
             "winner": self.winner,
+            "lot_count": self.lot_count,
             "contract_try": (
                 round(self.contract_try, 2) if self.contract_try is not None else None
             ),
@@ -418,15 +448,18 @@ def risk_flags(awards: Iterable[Award], *, low_discount_pct: float = 3.0) -> Ris
             continue
         for f in flags:
             counts[f] += 1
+        lots = max(a.lot_count, len(a.lots))
         flagged.append(
             AwardFlags(
                 ikn=a.ikn,
                 title=a.title,
                 authority=a.authority,
-                winner=a.winner,
+                # The row shows the whole tender's sum; no one lot winner won all of it.
+                winner=None if lots > 1 else a.winner,
                 contract_try=a.contract_try,
                 discount_pct=a.discount_pct,
                 flags=flags,
+                lot_count=lots,
             )
         )
     flagged.sort(key=lambda f: (-len(f.flags), -(f.contract_try or 0.0), f.ikn))
@@ -506,5 +539,7 @@ def overview(awards: Sequence[Award]) -> Overview:
         competition=competition_stats(awarded),
         total_contract_try=sum(a.contract_try for a in awarded if a.contract_try is not None),
         missing_estimate=sum(1 for a in awarded if a.estimate_try is None),
-        missing_bid_count=sum(1 for a in awarded if a.valid_bid_count is None),
+        missing_bid_count=sum(
+            1 for a in awarded if a.valid_bid_count is None and not _bids_merged_away(a)
+        ),
     )
