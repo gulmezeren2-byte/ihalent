@@ -12,10 +12,14 @@
   notice form's two columns don't line up row by row, so labels and values are paired
   cell by cell; every file is checked against its own table of contents, and a notice
   that doesn't add up is rejected, not guessed. A notice that states it has no estimate
-  ("- TRY", or a sentence saying so) is read with the estimate left empty. Verified on
-  the works bulletins of 12 and 13 November 2026: 151 of 151 notices, both fetched with
-  `fetch-bulletin` (the 12th through the page's archive form, the 13th through its
-  button for the day). Needs the new `bulletin` extra (pdfplumber).
+  ("- TRY", or a sentence saying so) is read with the estimate left empty. A contract
+  priced in euros or dollars is not counted as lira: its lira price is left empty, with
+  no exchange rate guessed (nine goods notices of 12–13 November 2026 do this), and an
+  estimate printed in lira beside its foreign original is read in lira. An İKN with a
+  numbered suffix (`2026/1007522-4`) is kept as printed. Verified on 883 of 883 notices:
+  the works and goods bulletins of 12 and 13 November 2026 and the service and
+  consultancy bulletins of the 13th, all fetched with `fetch-bulletin` (the two goods
+  days in one `--since` run). Needs the new `bulletin` extra (pdfplumber).
 - **New field `lots_unverified`, and no discount for it.** A tender awarded in parts gets
   one notice per lot, published on different days, each with the tender-wide estimate.
   Merged, its contracts are summed, but its discount is now `null`: nothing says when the
