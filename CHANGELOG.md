@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- **Every working day, by itself (`ihalent daily FOLDER`).** Fetches what the folder is
+  missing of every tender type's bulletins from the last seven days (`--days`), then
+  rebuilds `FOLDER/awards.jsonl`. It is made to be run by the computer's scheduler; the
+  README has the Windows and cron lines. A day with no bulletin, such as a public
+  holiday, is not an error; a whole window without one exits 1, since that is also how a
+  changed page would look. If the page asks for human verification or refuses, it stops
+  and leaves `ihalent-stopped.txt` in the folder, and later runs do not contact the page
+  until that file is deleted.
+- **Each bulletin is read once.** A day's goods bulletin takes over a minute to read, and
+  the dataset is rebuilt from every file collected so far, so a daily run would have
+  grown slower every day. `ingest-bulletin` and `daily` keep each file's read in
+  `.ihalent-reads/` beside it and reuse it while the file, the ihalent version, the
+  reading code and pdfplumber are unchanged. The six bulletins of 12–13 November 2026 took 213 seconds the first time and
+  1 second after, with the same awards. The saved reads hold what the bulletins hold,
+  winners' names included, and stay in that folder.
+- `fetch_range` takes several tender types, with the two-second pause kept between all
+  of their downloads.
+
 ## 0.4.0 — 2026-11-14
 
 - **Read the Kamu İhale Bülteni (`ihalent fetch-bulletin`, `ihalent ingest-bulletin`).**

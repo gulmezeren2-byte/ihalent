@@ -20,7 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from html.parser import HTMLParser
@@ -221,7 +221,7 @@ class FetchReport:
 def fetch_range(
     start: date,
     end: date,
-    kind: TenderType,
+    kind: TenderType | Sequence[TenderType],
     out_dir: str | Path,
     *,
     opener: Opener | None = None,
@@ -231,26 +231,29 @@ def fetch_range(
 ) -> FetchReport:
     """Fetch every working day from ``start`` to ``end``, one file at a time.
 
+    ``kind`` is one tender type or several; each day gets every type asked for.
     Waits at least two seconds between downloads, skips files already on disk,
     records days with no bulletin and carries on, and stops at the first sign of
     verification or refusal."""
+    kinds = [kind] if isinstance(kind, TenderType) else list(kind)
     report = FetchReport([], [])
     op: Opener = opener or default_opener()
     first = True
     for day in weekdays(start, end):
-        target = Path(out_dir) / bulletin_filename(day, kind)
-        if not (target.is_file() and target.read_bytes()[:2] == b"PK"):
-            if not first:
-                sleep(max(pause, MIN_PAUSE_SECONDS))
-            first = False
-        try:
-            report.results.append(fetch_bulletin(day, kind, out_dir, opener=op, today=today))
-        except AccessBlocked as exc:
-            report.blocked = str(exc)
-            break
-        except NoBulletin as exc:
-            report.unavailable.append((day, str(exc)))
-        except FetchError as exc:
-            report.failed = f"{day.isoformat()}: {exc}"
-            break
+        for k in kinds:
+            target = Path(out_dir) / bulletin_filename(day, k)
+            if not (target.is_file() and target.read_bytes()[:2] == b"PK"):
+                if not first:
+                    sleep(max(pause, MIN_PAUSE_SECONDS))
+                first = False
+            try:
+                report.results.append(fetch_bulletin(day, k, out_dir, opener=op, today=today))
+            except AccessBlocked as exc:
+                report.blocked = str(exc)
+                return report
+            except NoBulletin as exc:
+                report.unavailable.append((day, str(exc)))
+            except FetchError as exc:
+                report.failed = f"{day.isoformat()}: {exc}"
+                return report
     return report

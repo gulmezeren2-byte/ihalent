@@ -13,8 +13,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from typer.testing import CliRunner
 
 from ihalent import fetch
+from ihalent.cli import app
 from ihalent.fetch import (
     AccessBlocked,
     NoBulletin,
@@ -170,6 +172,119 @@ def test_a_network_error_stops_the_range_and_keeps_the_report(tmp_path: Path) ->
     assert [r.day.day for r in report.results] == [9]
     assert report.failed and "2026-11-10" in report.failed
     assert report.blocked is None
+
+
+_TYPE_KEY = "ctl00$ContentPlaceHolder1$ddlstBxIhaleTur"
+_DATE_KEY = "ctl00$ContentPlaceHolder1$etBultenTarihi$EkapTakvimTextBox_etBultenTarihi"
+_TAG = {"1": "MAL", "2": "YAPIM", "3": "HIZMET", "4": "DANISMANLIK"}
+
+
+def _archive(form: dict[str, str]) -> Any:
+    return zip_named(f"BULTEN_{form[_DATE_KEY].replace('.', '')}_{_TAG[form[_TYPE_KEY]]}.zip")
+
+
+def test_several_types_keep_the_pause_between_every_download(tmp_path: Path) -> None:
+    waits: list[float] = []
+    report = fetch_range(
+        date(2026, 11, 11), date(2026, 11, 12), list(fetch.TYPE_CODE), tmp_path,
+        opener=FakeOpener(_archive), today=TODAY, pause=0.0, sleep=waits.append,
+    )
+    assert len(report.results) == 8  # two days, four types
+    assert len(waits) == 7  # before every download but the first, across types too
+    assert all(w >= fetch.MIN_PAUSE_SECONDS for w in waits)
+
+
+def test_a_block_on_one_type_stops_every_type(tmp_path: Path) -> None:
+    def serve(form: dict[str, str]) -> Any:
+        if form[_TYPE_KEY] == "2":
+            return urllib.error.HTTPError(fetch.BULLETIN_PAGE, 428, "no", Message(), None)
+        return _archive(form)
+
+    op = FakeOpener(serve)
+    report = fetch_range(
+        date(2026, 11, 12), date(2026, 11, 12), list(fetch.TYPE_CODE), tmp_path,
+        opener=op, today=TODAY, sleep=lambda s: None,
+    )
+    assert [r.path.name for r in report.results] == ["BULTEN_12112026_MAL.zip"]
+    assert report.blocked
+    assert len(op.posts) == 2  # goods, then works refused; service and consultancy not asked
+
+
+def _report(have: int = 1, **kw: Any) -> fetch.FetchReport:
+    results = [fetch.FetchResult(date(2026, 11, 13), Path("x.zip"), downloaded=False)] * have
+    return fetch.FetchReport(results, [], **kw)
+
+
+def test_daily_says_when_a_whole_week_brought_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A changed page answers every day with "no bulletin"; a holiday-free week
+    # without a single file must not look like a quiet success.
+    monkeypatch.setattr(fetch, "fetch_range", lambda *a, **k: _report(have=0))
+    res = CliRunner().invoke(app, ["daily", str(tmp_path / "ekap")])
+    assert res.exit_code == 1
+    assert "nothing" in res.output
+
+
+def test_daily_fills_in_the_last_week_of_every_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[Any, ...]] = []
+
+    def fake_range(start: date, end: date, kinds: Any, out_dir: Any, **kw: Any) -> Any:
+        calls.append((start, end, list(kinds), Path(out_dir)))
+        return _report()
+
+    monkeypatch.setattr(fetch, "fetch_range", fake_range)
+    res = CliRunner().invoke(app, ["daily", str(tmp_path / "ekap")])
+    assert res.exit_code == 0, res.output
+    ((start, end, kinds, out),) = calls
+    assert end == date.today() and (end - start).days == 6
+    assert set(kinds) == set(fetch.TYPE_CODE)
+    assert out == tmp_path / "ekap"
+
+
+def test_daily_after_a_block_does_not_contact_the_page_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = tmp_path / "ekap"
+    runner = CliRunner()
+    blocked = "the bulletin page now asks for human verification; stopping"
+    monkeypatch.setattr(fetch, "fetch_range", lambda *a, **k: _report(blocked=blocked))
+    first = runner.invoke(app, ["daily", str(folder)])
+    assert first.exit_code == 3
+    assert blocked in (folder / "ihalent-stopped.txt").read_text(encoding="utf-8")
+
+    def must_not_run(*a: Any, **k: Any) -> Any:
+        raise AssertionError("the page was contacted after a block")
+
+    monkeypatch.setattr(fetch, "fetch_range", must_not_run)
+    again = runner.invoke(app, ["daily", str(folder)])
+    assert again.exit_code == 3, again.output
+
+    (folder / "ihalent-stopped.txt").unlink()  # the user decides to try again
+    monkeypatch.setattr(fetch, "fetch_range", lambda *a, **k: _report())
+    assert runner.invoke(app, ["daily", str(folder)]).exit_code == 0
+
+
+def test_daily_reads_the_folder_and_says_when_a_file_needs_a_look(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ihalent import bulletin
+
+    reads = {"a.zip": bulletin.BulletinRead("A_SONUC.pdf", toc_ikns=[])}  # no contents list
+    monkeypatch.setattr(bulletin, "read_bulletin", lambda p: [reads[Path(p).name]])
+    monkeypatch.setattr(fetch, "fetch_range", lambda *a, **k: _report(failed="boom"))
+    folder = tmp_path / "ekap"
+    folder.mkdir()
+    (folder / "a.zip").write_bytes(b"PK")
+    res = CliRunner().invoke(app, ["daily", str(folder)])
+    assert res.exit_code == 4  # the network error wins; the read still ran
+    assert (folder / "awards.jsonl").is_file()
+    assert "CHECK" in res.output
+
+    monkeypatch.setattr(fetch, "fetch_range", lambda *a, **k: _report())
+    assert CliRunner().invoke(app, ["daily", str(folder)]).exit_code == 1
 
 
 def test_tls_adds_only_the_servers_suite_and_keeps_checks_on() -> None:
