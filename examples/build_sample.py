@@ -1,8 +1,8 @@
 """Build examples/sample-awards.jsonl from the real data in this folder.
 
 Two real sources, both collected from EKAP via ihale-mcp in
-December-2025/January-2026, shipped as-is (we ship the collected notices, not a
-redistributed dataset):
+December-2025/January-2026, shipped as collected (we ship the collected notices, not a
+redistributed dataset), except that private individuals' names are reduced to initials:
 
   notices/*.md              four result notices across four authority types,
                             including İstanbul Üniversitesi-Cerrahpaşa's

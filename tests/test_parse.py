@@ -31,7 +31,7 @@ def test_parse_award_with_discount(notice_award_jv: str) -> None:
     assert a.valid_bid_count == 3
     assert a.single_bid is False
     assert a.is_joint_venture is True
-    assert a.winner == "MUHAMMED HANEFİ YILDIRIM"
+    assert a.winner == "M. H. Y."
     # The contract date (part 4), not the tender date above it (31.12.2025).
     assert a.result_date == "2026-01-26"
     assert a.cancelled is False
@@ -52,7 +52,7 @@ def test_parse_large_award(notice_award_big: str) -> None:
     assert a.ikn == "2025/2198370"
     assert a.discount_pct == 33.87
     assert a.valid_bid_count == 12
-    assert a.winner == "ÖZDEN YEL"
+    assert a.winner == "Ö. Y."
     assert len(a.winners_all) == 2
 
 

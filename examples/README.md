@@ -1,7 +1,8 @@
 # Example: nine real awards from the December-2025 / January-2026 window
 
-Two real sources, both collected from EKAP via ihale-mcp, shipped as-is (we ship the
-collected data, not a redistributed dataset). `build_sample.py` turns them into
+Two real sources, both collected from EKAP via ihale-mcp, shipped as collected (we ship the
+collected data, not a redistributed dataset), except that the names of private individuals
+are reduced to initials; companies and authorities are as published. `build_sample.py` turns them into
 `sample-awards.jsonl` — exactly the path a user takes with their own collected data:
 
 ```

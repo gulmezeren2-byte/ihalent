@@ -2,7 +2,8 @@
 
 The two markdown blobs below are the exact result-notice bodies EKAP served
 for two real tenders (an İl Özel İdare repair job and a DSİ stream works),
-trimmed to the tables the parser reads. Testing against the real template —
+trimmed to the tables the parser reads, with private individuals' names reduced
+to initials. Testing against the real template —
 not a tidied-up invention — is the point: if EKAP's rendering is what these
 tests encode, then green tests mean the parser handles the real thing.
 """
@@ -24,7 +25,7 @@ NOTICE_AWARD_JV = """**SONUÇ İLANI****BİNA ONARIMI YAPTIRILACAKTIR**
 | **4- Sözleşmenin** | | |
 | **a)** Tarihi | : | 26.01.2026 |
 | **b)** Bedeli | : | 2.227.000,00 TRY |
-| **d)** Yüklenicisi | : | MUHAMMED HANEFİ YILDIRIM, BEDKURT GIDA İNŞAAT OTOMOTİV LİMİTED ŞİRKETİ İş Ortaklığı |
+| **d)** Yüklenicisi | : | M. H. Y., BEDKURT GIDA İNŞAAT OTOMOTİV LİMİTED ŞİRKETİ İş Ortaklığı |
 """
 
 # İKN 2025/2198370 — award, single firm named first, discount ~33.87%
@@ -36,7 +37,7 @@ NOTICE_AWARD_BIG = """**SONUÇ İLANI****DERE ISLAHI YAPTIRILACAKTIR**
 | **b)** Toplam Teklif Sayısı | : | 20 |
 | **c)** Toplam Geçerli Teklif Sayısı | : | 12 |
 | **b)** Bedeli | : | 19.709.997,40 TRY |
-| **d)** Yüklenicisi | : | ÖZDEN YEL, ATAŞ MÜHENDİSLİK İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ İş Ortaklığı |
+| **d)** Yüklenicisi | : | Ö. Y., ATAŞ MÜHENDİSLİK İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ İş Ortaklığı |
 """
 
 # A cancelled tender: result notice with no winner and no contract value.
