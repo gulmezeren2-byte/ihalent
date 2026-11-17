@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Private individuals' names reduced to initials in the shipped examples and tests.**
+  Two of the real awards in `examples/` were won by joint ventures with a private
+  individual as a partner, and that person's full name appeared in the notices, the
+  sample data, the schema example, the test fixtures and the README's `ihalent firm`
+  example. They now read as initials; companies and authorities are unchanged, and the
+  README example looks up the company in the same joint venture instead. The figures
+  are the same.
+
 ## 0.5.0 — 2026-11-14
 
 - **Every working day, by itself (`ihalent daily FOLDER`).** Fetches what the folder is

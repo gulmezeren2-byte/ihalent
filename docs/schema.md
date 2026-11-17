@@ -44,7 +44,7 @@ actually had the number.
 ## Example line
 
 ```json
-{"ikn": "2025/2198370", "title": "İSTANBUL ARNAVUTKÖY TÜRKKÖŞE DERESİ ISLAHI", "authority": "DSİ 14. Bölge Müdürlüğü", "province": "İstanbul", "tender_type": "yapim", "estimate_try": 29802943.48, "contract_try": 19709997.4, "winner": "ÖZDEN YEL", "winners_all": ["ÖZDEN YEL", "ATAŞ MÜHENDİSLİK ..."], "is_joint_venture": true, "downloaders": 34, "bid_count": 20, "valid_bid_count": 12, "result_date": "2026-02-13", "cancelled": false, "discount_pct": 33.87, "single_bid": false}
+{"ikn": "2025/2198370", "title": "İSTANBUL ARNAVUTKÖY TÜRKKÖŞE DERESİ ISLAHI", "authority": "DSİ 14. Bölge Müdürlüğü", "province": "İstanbul", "tender_type": "yapim", "estimate_try": 29802943.48, "contract_try": 19709997.4, "winner": "Ö. Y.", "winners_all": ["Ö. Y.", "ATAŞ MÜHENDİSLİK ..."], "is_joint_venture": true, "downloaders": 34, "bid_count": 20, "valid_bid_count": 12, "result_date": "2026-02-13", "cancelled": false, "discount_pct": 33.87, "single_bid": false}
 ```
 
 ## Producing awards

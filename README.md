@@ -47,10 +47,14 @@ the analytics that don't exist yet.
 **A firm's history** — every award across the dataset, folded across spelling variants:
 
 ```
-$ ihalent firm examples/sample-awards.jsonl "ÖZDEN YEL"
-ÖZDEN YEL
+$ ihalent firm examples/sample-awards.jsonl "ATAŞ MÜHENDİSLİK"
+ATAŞ MÜHENDİSLİK HARİTA İMAR PLANLAMA İNŞAAT GIDA HAYVANCILIK SANAYİ VE TİCARET
+LİMİTED ŞİRKETİ
   wins: 1   joint ventures: 1   total contract value: 19.709.997,40 TL
-Discount (kırım) — ÖZDEN YEL         
+Discount (kırım) — ATAŞ MÜHENDİSLİK  
+HARİTA İMAR PLANLAMA İNŞAAT GIDA     
+HAYVANCILIK SANAYİ VE TİCARET LİMİTED
+ŞİRKETİ                              
 ┌────────┬────────┬────────┬────────┐
 │ mean   │ median │ min    │ max    │
 ├────────┼────────┼────────┼────────┤
