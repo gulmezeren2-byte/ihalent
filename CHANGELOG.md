@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 — 2026-11-18
 
 - **Private individuals' names reduced to initials in the shipped examples and tests.**
   Two of the real awards in `examples/` were won by joint ventures with a private
